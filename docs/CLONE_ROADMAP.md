@@ -9,7 +9,7 @@ Status: Binder protocol **~99.5%** decoded; RE Tool v1.1 auto-capture **validate
 
 | Gap | Tool / artifact | Done? |
 |---|---|:---:|
-| XOR symbol names in libvc | static Ghidra XOR decode OR true spawn | **Still open** |
+| XOR symbol names in libvc | **✅ offline decode** (`tools/decode_libvc_xor.py`) | **Done** |
 | TX13 int[5] semantics | TX13 delta logger | **✅ c0=active, c1/c2=WxH** |
 | Runtime capture (no Termux) | RE Tool v1.1 START | **✅ validated** |
 | TX11/TX14 native pipeline | Ghidra + cf7e live | ~88% |
@@ -52,9 +52,9 @@ Expected log lines:
 [dlopen] /data/libvc++.so => 0x...
 [shadowhook_init] mode=1 debug=0
 [libvc init] enter ctx=0x...
-[XOR_STATIC] lib_name key@+8 => "libui.so"
-[XOR_STATIC] sym_1 key@+7d => "_ZN7android13GraphicBuffer..."
-[HOOK_SYM] lib="libui.so" sym="_ZN7android13GraphicBuffer4lockEjPPvPiS3_"
+[XOR_STATIC] lib_name key@+8 => "libcameraservice.so"
+[XOR_STATIC] sym_1 key@+7d => "_ZN7android7camera319Camera3OutputStream25returnBufferCheckedLocked..."
+[HOOK_SYM] lib="libcameraservice.so" sym="_ZN7android7camera319Camera3OutputStream25returnBufferCheckedLocked..."
 ```
 
 ### Solution B — attach to running vcplax (late)
@@ -154,7 +154,7 @@ Example:
 │  Decode/encode: AMediaCodec NDK                              │
 │    AMediaCodec_createDecoderByType / _dequeueInputBuffer     │
 │                                                              │
-│  Inject: libvc.so (ShadowHook on libui GraphicBuffer::lock)  │
+│  Inject: libvc.so (ShadowHook on libcameraservice Camera3OutputStream::returnBufferCheckedLocked) │
 └─────────────────────────────────────────────────────────────┘
 ```
 

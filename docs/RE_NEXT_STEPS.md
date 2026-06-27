@@ -68,15 +68,15 @@ re_tool/
 
 ## 4. Что ещё будем ковырять (приоритеты)
 
-### P0 — бинарники и XOR (до 100% libvc)
+### P0 — бинарники и XOR (до 100% libvc) ✅ DONE
 
 | Задача | Метод | Артефакт |
 |---|---|---|
-| Runtime vcplax dump | `/proc/PID/exe` (v1.2 Pull) | `proc/vcplax_exe_dump` |
-| APK reference | unzip natives | `apk_native/*.so` |
-| XOR symbol names | Frida `[XOR_STATIC]` на vcplax base | log lines |
-| Offline XOR | Ghidra/python на `libvc.so` из APK | `docs/` report |
-| Diff APK vs runtime exe | md5/compare | tamper detect |
+| Runtime vcplax dump | `/proc/PID/exe` (v1.2 Pull) | `proc/vcplax_exe_dump` ✅ jysdd4 |
+| APK reference | unzip natives | identical md5 to runtime ✅ |
+| XOR symbol names | `tools/decode_libvc_xor.py` | libcameraservice.so + 5 syms ✅ |
+| libvc hook semantics | capstone + Ghidra init | `exports/libvc.so_hook_handlers.c` ✅ |
+| Diff APK vs runtime exe | md5/compare | **identical** ✅ |
 
 ### P1 — media pipeline native
 

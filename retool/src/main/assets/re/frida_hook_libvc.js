@@ -5,7 +5,8 @@
 
 var CONFIG = {
   ONTRANSACT_OFFSET: ptr('0x43f8b4'),
-  LIBVC_INIT_OFFSET: ptr('0x774b0'),       // file VA in libvc.so (arm64)
+  GHIDRA_IMAGE_BASE: ptr('0x100000'),      // libvc.so Ghidra base → fileOff = VA - base
+  LIBVC_INIT_OFFSET: ptr('0x774b0'),       // file offset of init() in libvc.so (arm64)
   DUMP_LEN: 128,
   MAX_INTS: 12,
   DESCRIPTOR: 'com.xiaomi.vlive.IMyBinderService',
@@ -28,7 +29,7 @@ var CONFIG = {
     { off: ptr('0x14af38'), len: 0x9d, keyOff: 0x7f, name: 'sym_2' },
     { off: ptr('0x14afd5'), len: 0x99, keyOff: 0x29, name: 'sym_3' },
     { off: ptr('0x14b06e'), len: 0x34, keyOff: 0x4f, name: 'sym_4' },
-    { off: ptr('0x14b0a2'), len: 0x28, keyOff: 0x51, name: 'sym_5' }
+    { off: ptr('0x14b0a2'), len: 0x28, keyOff: 0x44, name: 'sym_5' }
   ],
 
   FULL_BLOCK_CODES: null
@@ -214,9 +215,14 @@ function logPollDelta(counters, prev) {
       (delta.length ? ' DELTA {' + delta.join(', ') + '}' : ' (first sample)'));
 }
 
-function decodeXorString(base, blobOff, length, keyByte) {
+function ghidraVaToFileOff(va) {
+  return va.sub(CONFIG.GHIDRA_IMAGE_BASE);
+}
+
+function decodeXorString(base, blobVa, length, keyByte) {
   var out = [];
   var i, b, seed;
+  var blobOff = ghidraVaToFileOff(blobVa);
   seed = 7;
   for (i = 0; i < length; i++) {
     b = seed ^ base.add(blobOff).add(i).readU8();
@@ -232,11 +238,17 @@ function decodeXorString(base, blobOff, length, keyByte) {
 
 function dumpStaticXorTable(libvcBase, hookState) {
   if (!CONFIG.DUMP_XOR_RODATA || !libvcBase) return;
-  var keyBase = hookState;
-  if (keyBase.isNull()) keyBase = libvcBase;
+  // Keys live in LoadedLib / global hook state (PTR @ libvc+0x13a090), not in init code.
+  var globalState = libvcBase.add(ghidraVaToFileOff(ptr('0x23a090')));
   CONFIG.XOR_BLOB_OFFSETS.forEach(function (entry) {
     var keyByte = 0;
-    try { keyByte = keyBase.add(entry.keyOff).readU8(); } catch (e) { keyByte = 0; }
+    try {
+      if (hookState && !hookState.isNull()) {
+        keyByte = hookState.add(entry.keyOff).readU8();
+      } else {
+        keyByte = globalState.add(entry.keyOff).readU8();
+      }
+    } catch (e) { keyByte = 0; }
     var decoded = decodeXorString(libvcBase, entry.off, entry.len, keyByte);
     log('[XOR_STATIC] ' + entry.name + ' key@+' + entry.keyOff.toString(16) +
         '(0x' + keyByte.toString(16) + ') => "' + decoded + '"');
@@ -445,8 +457,8 @@ function bootstrapLateAttach() {
       dumpStaticXorTable(libvc.base, libvc.base);
     }
   } else if (vcplax && CONFIG.DUMP_XOR_RODATA) {
-    log('[!] no libvc.so module — libvc may be embedded in vcplax; XOR scan on vcplax base');
-    dumpStaticXorTable(vcplax.base, vcplax.base.add(CONFIG.LIBVC_INIT_OFFSET));
+    log('[!] no libvc.so module in maps (dlopen+unlink) — skip runtime XOR');
+    log('[!] offline: python3 tools/decode_libvc_xor.py on pulled libvc.so.real');
   }
   installShadowhookHooks();
   installVcplaxOnTransact();

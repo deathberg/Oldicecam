@@ -65,11 +65,11 @@ int MediaPipeline::getStatus() const {
     return running_ ? STATUS_PLAYING : 0;
 }
 
-void MediaPipeline::seekRange(int64_t beginUs, int64_t endUs) {
+void MediaPipeline::seekRange(int64_t beginMs, int64_t endMs) {
     std::lock_guard<std::mutex> lock(mu_);
-    ctx_->seekBeginUs = beginUs;
-    ctx_->seekEndUs = endUs;
-    ALOGI("seekRange %lld..%lld us", (long long)beginUs, (long long)endUs);
+    ctx_->seekBeginMs = beginMs;
+    ctx_->seekEndMs = endMs;
+    ALOGI("seekRange %lld..%lld ms", (long long)beginMs, (long long)endMs);
     // Original: FUN_00541f7c(ctx, beginUs, endUs)
 }
 

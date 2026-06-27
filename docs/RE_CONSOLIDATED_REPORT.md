@@ -2,7 +2,7 @@
 
 APK: `testicecam2.apk` · пакет **`com.potplayer.music`** · daemon **`vcplax`** · Binder **`com.xiaomi.vlive.IMyBinderService`**
 
-Последний runtime-лог: **`re_tool_capture_cf7e.log`** (RE Tool v1.1 auto START, watchdog inject)
+Последний runtime-лог: **`jysdd4` Pull ALL** + **`docs/RE_FINAL_REPORT.md`**
 
 ---
 
@@ -17,8 +17,8 @@ APK: `testicecam2.apk` · пакет **`com.potplayer.music`** · daemon **`vcpl
 | Binder TX capture | ✅ **96 UI TX** | все коды 11–25 кроме 13 (poll) |
 | onTransact offset runtime | ✅ | base `0x6410241000`, hook `@ +0x43f8b4` |
 | TX13 counter semantics | ✅ | c0=active, c1/c2=frame WxH flash |
-| libvc `[HOOK_SYM]` / XOR names | ❌ **0 строк** | libvc уже загружена до inject |
-| Static XOR from .rodata | ❌ | нужен true spawn или static decode |
+| libvc `[HOOK_SYM]` / XOR names | ✅ **offline decode** | `decode_libvc_xor.py` + pull jysdd4 |
+| Static XOR from .rodata | ✅ | libcameraservice.so + 5 Camera3 symbols |
 
 **Итог:** workflow для **Binder/runtime RE — полностью рабочий**. Для **клона без libvc.so** остаётся один блокер — имена XOR-символов hook-целей.
 
@@ -117,7 +117,7 @@ com.potplayer.music (Java)
 | onTransact dispatch | ✅ full switch | ✅ | 96 TX captured | **99%** |
 | TX11 media pipeline | ✅ decompiled | partial | play/stop/seek live | **88%** |
 | TX24 color inject | ✅ decompiled | ✅ | 47 live samples | **95%** |
-| libvc hook targets | XOR blobs located | static keys known | **no HOOK_SYM** | **42%** |
+| libvc hook targets | XOR blobs located | **✅ decoded + disasm** | no runtime HOOK_SYM | **~95%** |
 | libshadowhook JNI | ✅ | ✅ | dlopen seen | **90%** |
 | FFmpeg in vcplax | ✅ static link | 67k strings | — | **85%** |
 
