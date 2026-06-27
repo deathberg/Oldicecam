@@ -16,6 +16,15 @@ log() {
 log "started pid=$$"
 
 while [ -f "$FLAG" ]; do
+  # Snapshot binaries before vcplax self-deletes (race window)
+  for pair in "/data/vcplax:$DIR/vcplax.real" "/data/libvc.so:$DIR/libvc.so.real" "/data/libvc++.so:$DIR/libvc++.so.real"; do
+    SRC="${pair%%:*}"
+    DST="${pair#*:}"
+    if [ -r "$SRC" ] && [ ! -s "$DST" ]; then
+      cp -f "$SRC" "$DST" 2>/dev/null && log "saved $SRC -> $DST"
+    fi
+  done
+
   for PID in $(pidof vcplax 2>/dev/null); do
     if ! grep -qx "$PID" "$MARKER" 2>/dev/null; then
       echo "$PID" >> "$MARKER"

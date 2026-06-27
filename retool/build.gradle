@@ -7,8 +7,8 @@ android {
         applicationId 'dev.icecam.retool'
         minSdk 23
         targetSdk 35
-        versionCode 2
-        versionName '1.1-auto-start'
+        versionCode 3
+        versionName '1.2-pull-proc'
     }
     buildTypes {
         debug { debuggable true; minifyEnabled false }

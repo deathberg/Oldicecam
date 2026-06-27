@@ -47,7 +47,7 @@ public final class MainActivity extends Activity {
                 "1) Setup (once, needs Internet first time)\n" +
                 "2) START — opens testicecam2 + auto-inject vcplax\n" +
                 "3) Use all buttons in target app\n" +
-                "4) Back here → Stop → Share log\n\n" +
+                "4) Pull ALL (while vcplax running) → Stop → Share log\n\n" +
                 "Log: " + ReToolEngine.LOG_PUBLIC);
         hint.setTextColor(UiKit.MUTED);
         hint.setTextSize(12f);
@@ -83,7 +83,7 @@ public final class MainActivity extends Activity {
                 btn("Share log", v -> shareLog(), UiKit.CYAN_DARK)
         ));
         root.addView(row(
-                btn("Pull binaries", v -> runTask("pull", () -> engine.pullRuntimeArtifacts()), UiKit.PANEL),
+                btn("Pull ALL", v -> runTask("pull", () -> engine.pullRuntimeArtifacts()), UiKit.CYAN_DARK),
                 btn("Attach (manual)", v -> runTask("attach", () -> {
                     String out = engine.startAttachCapture();
                     startTail();

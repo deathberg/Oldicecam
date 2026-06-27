@@ -27,10 +27,13 @@ public final class ReToolEngine {
             "com.xiaomi.vlive"
     };
 
+    public static final String PULL_SCRIPT = REMOTE_DIR + "/re_tool_pull.sh";
+
     private static final String[] ASSET_SCRIPTS = {
             "re/frida_hook_libvc.js",
             "re/re_tool_watchdog.sh",
-            "re/re_tool_start_session.sh"
+            "re/re_tool_start_session.sh",
+            "re/re_tool_pull.sh"
     };
 
     private final Context ctx;
@@ -75,28 +78,8 @@ public final class ReToolEngine {
 
     public String pullRuntimeArtifacts() {
         String script =
-                "set -e\n" +
-                "OUT=" + Shell.q(PULL_DIR) + "\n" +
-                "mkdir -p \"$OUT/deployed\" \"$OUT/proc\"\n" +
-                "echo pulled_at=$(date) > \"$OUT/README.txt\"\n" +
-                detectTargetAppShell() + "\n" +
-                "for f in /data/vcplax /data/libvc.so /data/libvc++.so /data/camera/vcplax /data/camera/libvc.so " +
-                REMOTE_DIR + "/vcplax.real; do\n" +
-                "  if [ -r \"$f\" ]; then\n" +
-                "    cp -f \"$f\" \"$OUT/deployed/$(basename \"$f\")\" 2>/dev/null || " +
-                "cat \"$f\" > \"$OUT/deployed/$(basename \"$f\")\"\n" +
-                "    ls -l \"$OUT/deployed/$(basename \"$f\")\"\n" +
-                "  else\n" +
-                "    echo MISSING \"$f\" >> \"$OUT/deployed/MISSING.txt\"\n" +
-                "  fi\n" +
-                "done\n" +
-                "PID=$(pidof vcplax 2>/dev/null || true)\n" +
-                "echo vcplax_pid=$PID > \"$OUT/vcplax_pid.txt\"\n" +
-                "if [ -n \"$PID\" ]; then\n" +
-                "  tr '\\0' ' ' < /proc/$PID/cmdline > \"$OUT/vcplax_cmdline.txt\"\n" +
-                "  cat /proc/$PID/maps > \"$OUT/vcplax_maps.txt\" 2>/dev/null || true\n" +
-                "fi\n" +
-                "echo PULL_OK dir=$OUT\n";
+                "if [ ! -x " + PULL_SCRIPT + " ]; then echo ERR_RUN_SETUP; exit 1; fi\n" +
+                "sh " + PULL_SCRIPT + "\n";
         Shell.Result r = Shell.su(script);
         log.logBlock("pull", r.all());
         return r.all();

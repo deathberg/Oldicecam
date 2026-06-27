@@ -435,16 +435,33 @@ function installVcplaxOnTransact() {
 }
 
 function bootstrapLateAttach() {
+  logModuleScan();
   var libvc = Process.findModuleByName('libvc.so');
+  var vcplax = findModule('vcplax');
   if (libvc) {
     installLibvcInitHook(libvc);
     if (CONFIG.DUMP_XOR_RODATA) {
-      log('[!] libvc already loaded — static XOR needs spawn or vcplax restart under Frida');
+      log('[!] libvc already loaded — trying static XOR dump');
       dumpStaticXorTable(libvc.base, libvc.base);
     }
+  } else if (vcplax && CONFIG.DUMP_XOR_RODATA) {
+    log('[!] no libvc.so module — libvc may be embedded in vcplax; XOR scan on vcplax base');
+    dumpStaticXorTable(vcplax.base, vcplax.base.add(CONFIG.LIBVC_INIT_OFFSET));
   }
   installShadowhookHooks();
   installVcplaxOnTransact();
+}
+
+function logModuleScan() {
+  log('[MODULE_SCAN] pid=' + Process.id);
+  Process.enumerateModules().forEach(function (m) {
+    if (m.path.indexOf('/data/') !== -1 ||
+        m.name.indexOf('vc') !== -1 ||
+        m.name.indexOf('shadow') !== -1 ||
+        m.path.indexOf('deleted') !== -1) {
+      log('[MODULE] ' + m.name + ' base=' + m.base + ' size=' + m.size + ' path=' + m.path);
+    }
+  });
 }
 
 log('=== vcplax Frida toolkit v3 (Binder + TX13 + XOR symbols) ===');
