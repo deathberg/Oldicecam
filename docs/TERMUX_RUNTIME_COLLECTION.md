@@ -37,34 +37,67 @@ cp ~/icecam_runtime_*.tar.gz /sdcard/Download/
 
 ## Шаг 2 — Frida (самое ценное для libvc XOR)
 
-Нужно, чтобы раскрыть **реальные имена** hook-символов в `libvc.so`.
+**Не используй `pip install frida-tools`** — на Termux Python 3.13 сборка падает (как в твоём логе).
+
+### Авто-установка (рекомендуется)
 
 ```bash
-pkg install -y python
-pip install frida-tools
-
-# frida-server (версия = frida --version на телефоне)
-# скачай frida-server-*-android-arm64.xz с GitHub releases frida
-# распакуй в Termux и запусти от root:
-tsu -c "./frida-server -D &"
+curl -LO https://raw.githubusercontent.com/deathberg/Oldicecam/cursor/apk-full-reverse-e3a1/tools/termux/setup_frida.sh
+chmod +x setup_frida.sh
+./setup_frida.sh
 ```
 
-Запусти приложение, найди процесс:
+### Ручная установка
 
 ```bash
-tsu -c "pidof vcplax"
+pkg update && pkg install -y root-repo tsu wget xz which
+pkg install -y frida frida-python
+
+frida --version          # запомни версию, напр. 16.5.9
+getprop ro.product.cpu.abi   # arm64-v8a
+
+# скачай frida-server ТОЙ ЖЕ версии (пример для 16.5.9 arm64):
+cd ~
+wget https://github.com/frida/frida/releases/download/16.5.9/frida-server-16.5.9-android-arm64.xz
+xz -d frida-server-16.5.9-android-arm64.xz
+mv frida-server-16.5.9-android-arm64 frida-server
+chmod 755 frida-server
+
+tsu -c "cp ~/frida-server /data/local/tmp/frida-server && chmod 755 /data/local/tmp/frida-server"
+tsu -c "pkill frida-server; /data/local/tmp/frida-server -D &"
+sleep 2
+frida-ps -U
 ```
 
-Hook (скачай `frida_hook_libvc.js` из `tools/termux/`):
+### Hook vcplax
 
 ```bash
 curl -LO https://raw.githubusercontent.com/deathberg/Oldicecam/cursor/apk-full-reverse-e3a1/tools/termux/frida_hook_libvc.js
 
+# приложение должно быть открыто!
+tsu -c "pidof vcplax"    # должен показать число
+
 frida -U -n vcplax -l frida_hook_libvc.js -o ~/libvc_hooks.log
 ```
 
-В приложении: смени источник, включи трансform/TX24, перезапусти сервис.  
-Ctrl+C → снова `./collect_runtime.sh` (подхватит `libvc_hooks.log`).
+Поиграй в приложении 30–60 сек (смена источника, transform), **Ctrl+C**, пришли `~/libvc_hooks.log`.
+
+Если `-n vcplax` не находит процесс:
+
+```bash
+PID=$(tsu -c "pidof vcplax")
+frida -U -p "$PID" -l frida_hook_libvc.js -o ~/libvc_hooks.log
+```
+
+### Частые ошибки
+
+| Ошибка | Решение |
+|---|---|
+| `pip` / `Building wheel for frida` | Не pip! Только `pkg install frida frida-python` |
+| `Unable to connect` | `tsu -c "/data/local/tmp/frida-server -D &"` |
+| `Process not found` | Сначала открой приложение, проверь `pidof vcplax` |
+| `version mismatch` | Версия server = `frida --version` |
+| `which: not found` при pip | `pkg install which` (но pip всё равно не нужен) |
 
 ## Что особенно полезно прислать
 
