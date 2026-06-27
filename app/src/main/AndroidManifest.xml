@@ -16,12 +16,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".recapture.ReCaptureActivity" android:exported="true" android:label="RE Capture">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
         <service android:name=".FloatService" android:exported="false" />
         <service android:name=".MediaProjectionForegroundService" android:exported="false" android:foregroundServiceType="mediaProjection" />
     </application>
