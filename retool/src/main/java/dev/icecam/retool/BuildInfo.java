@@ -3,6 +3,6 @@ package dev.icecam.retool;
 public final class BuildInfo {
     private BuildInfo() {}
 
-    public static final String VERSION_NAME = "1.0-re-tool";
-    public static final String BUILD_LABEL = "RE Tool v1";
+    public static final String VERSION_NAME = "1.1-auto-start";
+    public static final String BUILD_LABEL = "RE Tool v1.1";
 }

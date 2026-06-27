@@ -2,6 +2,7 @@ package dev.icecam.retool;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -13,7 +14,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 /**
- * Standalone root companion for testicecam2.apk — deploy Frida, inject vcplax, pull artifacts.
+ * Root companion for testicecam2.apk — Setup once, START launches target + auto-inject.
  */
 public final class MainActivity extends Activity {
     private AppLogger logger;
@@ -38,17 +39,16 @@ public final class MainActivity extends Activity {
         title.setText("RE Tool");
         title.setTextColor(UiKit.TEXT);
         title.setTextSize(20f);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setTypeface(null, Typeface.BOLD);
         root.addView(title);
 
         TextView hint = new TextView(this);
         hint.setText(
-                "Companion for testicecam2.apk (root).\n" +
-                "1) Install & open testicecam2\n" +
-                "2) Setup → Attach (or Spawn)\n" +
-                "3) Use camera app 1–2 min → Share log\n\n" +
-                "Log: " + ReToolEngine.LOG_PUBLIC + "\n" +
-                "Pull: " + ReToolEngine.PULL_DIR);
+                "1) Setup (once, needs Internet first time)\n" +
+                "2) START — opens testicecam2 + auto-inject vcplax\n" +
+                "3) Use all buttons in target app\n" +
+                "4) Back here → Stop → Share log\n\n" +
+                "Log: " + ReToolEngine.LOG_PUBLIC);
         hint.setTextColor(UiKit.MUTED);
         hint.setTextSize(12f);
         root.addView(hint);
@@ -56,49 +56,52 @@ public final class MainActivity extends Activity {
         statusView = new TextView(this);
         statusView.setTextColor(UiKit.CYAN);
         statusView.setTextSize(10f);
-        statusView.setTypeface(android.graphics.Typeface.MONOSPACE);
+        statusView.setTypeface(Typeface.MONOSPACE);
         statusView.setPadding(0, dp(8), 0, dp(4));
         root.addView(statusView);
 
         root.addView(row(
-                btn("Setup", v -> runTask("setup", () -> engine.setupAll())),
-                btn("Status", v -> runTask("status", () -> engine.status()))
+                btn("Setup", v -> runTask("setup", () -> engine.setupAll()), UiKit.PANEL),
+                btn("Status", v -> runTask("status", () -> engine.status()), UiKit.PANEL)
         ));
+
+        Button startBtn = btn("▶ START", v -> runTask("start", () -> {
+            String out = engine.startAutoSession();
+            startTail();
+            return out;
+        }), UiKit.GREEN);
+        startBtn.setTextSize(14f);
+        LinearLayout.LayoutParams startLp = new LinearLayout.LayoutParams(-1, -2);
+        startLp.setMargins(dp(2), dp(6), dp(2), dp(6));
+        root.addView(startBtn, startLp);
+
         root.addView(row(
-                btn("Attach vcplax", v -> runTask("attach", () -> {
-                    String out = engine.startAttachCapture();
-                    startTail();
-                    return out;
-                })),
-                btn("Spawn vcplax", v -> runTask("spawn", () -> {
-                    String out = engine.startSpawnCapture();
-                    startTail();
-                    return out;
-                }))
-        ));
-        root.addView(row(
-                btn("Pull binaries", v -> runTask("pull", () -> engine.pullRuntimeArtifacts())),
                 btn("Stop", v -> runTask("stop", () -> {
                     stopTail();
                     return engine.stopCapture();
-                }))
+                }), UiKit.PANEL),
+                btn("Share log", v -> shareLog(), UiKit.CYAN_DARK)
         ));
         root.addView(row(
-                btn("Share log", v -> shareLog()),
-                btn("Open pull dir", v -> openPullDir())
+                btn("Pull binaries", v -> runTask("pull", () -> engine.pullRuntimeArtifacts()), UiKit.PANEL),
+                btn("Attach (manual)", v -> runTask("attach", () -> {
+                    String out = engine.startAttachCapture();
+                    startTail();
+                    return out;
+                }), UiKit.PANEL)
         ));
 
         logView = new TextView(this);
         logView.setTextColor(UiKit.TEXT);
         logView.setTextSize(10f);
-        logView.setTypeface(android.graphics.Typeface.MONOSPACE);
+        logView.setTypeface(Typeface.MONOSPACE);
         ScrollView scroll = new ScrollView(this);
         scroll.addView(logView);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         setContentView(root);
         logger.setListener(text -> main.post(() -> logView.setText(text)));
-        appendUi("Ready · " + BuildInfo.BUILD_LABEL + "\nInstall testicecam2.apk, open it once, then Setup here.\n");
+        appendUi("Ready · " + BuildInfo.BUILD_LABEL + "\nInstall testicecam2.apk → Setup → START\n");
         refreshStatus();
     }
 
@@ -131,7 +134,7 @@ public final class MainActivity extends Activity {
         new Thread(() -> {
             while (tailRunning) {
                 try {
-                    String tail = engine.tailPublicLog(60);
+                    String tail = engine.tailPublicLog(50);
                     main.post(() -> statusView.setText("Live:\n" + tail));
                     Thread.sleep(2000);
                 } catch (Throwable ignored) {
@@ -168,11 +171,6 @@ public final class MainActivity extends Activity {
         });
     }
 
-    private void openPullDir() {
-        toast("Files: " + ReToolEngine.PULL_DIR);
-        runTask("pull-ls", () -> Shell.su("ls -laR " + ReToolEngine.PULL_DIR + " 2>/dev/null || echo empty").all());
-    }
-
     private void appendUi(String s) {
         logView.append(s);
     }
@@ -181,12 +179,12 @@ public final class MainActivity extends Activity {
         Toast.makeText(this, m, Toast.LENGTH_SHORT).show();
     }
 
-    private Button btn(String label, View.OnClickListener l) {
+    private Button btn(String label, View.OnClickListener l, int color) {
         Button b = new Button(this);
         b.setText(label);
         b.setAllCaps(false);
         b.setOnClickListener(l);
-        b.setBackground(UiKit.fill(UiKit.PANEL, dp(12), 0x44ffffff));
+        b.setBackground(UiKit.fill(color, dp(12), 0x44ffffff));
         b.setTextColor(UiKit.TEXT);
         b.setTextSize(11f);
         return b;
