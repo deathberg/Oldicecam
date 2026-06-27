@@ -2,6 +2,12 @@
 
 Ready-to-upload Android project for GitHub Actions.
 
+## APK reverse engineering (testicecam2.apk)
+
+- Full report: [docs/APK_FULL_REVERSE_ENGINEERING.md](docs/APK_FULL_REVERSE_ENGINEERING.md)
+- Reconstructed original source (readable): [reconstructed/original-apk/](reconstructed/original-apk/)
+- Decompile index: [decompiled/INDEX.md](decompiled/INDEX.md)
+
 ## v23 focus
 
 `v23-neon-control-panel` rebuilds the app-side control plane and UI around one source of truth:
