@@ -1,0 +1,7 @@
+563c2fe000-563c73d000 r-xp /data/vcplax
+563c73d000-563c73e000 rwxp /data/vcplax
+563c73e000-563cdd0000 r-xp /data/vcplax
+563cdd0000-563cdd1000 rwxp /data/vcplax
+563cdd1000-563cdd2000 r-xp /data/vcplax
+563cdd2000-563ce76000 r--p /data/vcplax
+563ce76000-563ce78000 rw-p /data/vcplax

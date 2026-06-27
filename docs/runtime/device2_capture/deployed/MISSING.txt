@@ -1,0 +1,7 @@
+MISSING /data/vcplax
+MISSING /data/libvc.so
+MISSING /data/libvc++.so
+MISSING /data/camera/vcplax
+MISSING /data/camera/libvc.so
+MISSING /data/camera/libshadowhook.so
+FAIL mem dd
