@@ -1,7 +1,7 @@
 name: Android APK build
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, 'cursor/recon-unified-e3a1' ]
   pull_request:
   workflow_dispatch:
 jobs:
@@ -18,15 +18,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.11.1
-      - name: Build debug APKs
-        run: gradle --no-daemon --stacktrace :app:assembleDebug :retool:assembleDebug
+      - name: Build IceCam debug APK
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
       - name: Upload IceCam APK
         uses: actions/upload-artifact@v4
         with:
           name: IceCam-debug-apk
           path: app/build/outputs/apk/debug/*.apk
-      - name: Upload RE Tool APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: RE-Tool-debug-apk
-          path: retool/build/outputs/apk/debug/*.apk

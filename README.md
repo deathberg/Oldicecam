@@ -1,38 +1,24 @@
-# IceCam Core v23
+# IceCam Pro
 
-Ready-to-upload Android project for GitHub Actions.
+Android-приложение для управления потоком камеры (v28, RE-unified Binder protocol).
 
-## APK reverse engineering (testicecam2.apk)
+> **Reverse engineering** `testicecam2.apk` (исходник, декompile, tools, clone, retool) вынесен в отдельную ветку  
+> [`cursor/re-testicecam2-e3a1`](https://github.com/deathberg/Oldicecam/tree/cursor/re-testicecam2-e3a1)
 
-- **Final RE report (100% spec):** [docs/RE_FINAL_REPORT.md](docs/RE_FINAL_REPORT.md)
-- **Consolidated status (95%):** [docs/RE_CONSOLIDATED_REPORT.md](docs/RE_CONSOLIDATED_REPORT.md)
-- **Next targets + pull audit:** [docs/RE_NEXT_STEPS.md](docs/RE_NEXT_STEPS.md)
-- Full report: [docs/APK_FULL_REVERSE_ENGINEERING.md](docs/APK_FULL_REVERSE_ENGINEERING.md)
-- Extended native RE: [docs/NATIVE_REVERSE_MAX.md](docs/NATIVE_REVERSE_MAX.md)
-- RE workspace setup: [re-workspace/README.md](re-workspace/README.md)
-- Auto native dump: [docs/native_analysis/](docs/native_analysis/)
-- Reconstructed original source (readable): [reconstructed/original-apk/](reconstructed/original-apk/)
-- Decompile index: [decompiled/INDEX.md](decompiled/INDEX.md)
+## Сборка
 
-## v23 focus
+```bash
+gradle :app:assembleDebug
+```
 
-`v23-neon-control-panel` rebuilds the app-side control plane and UI around one source of truth:
+## Документация приложения
 
-- `BuildInfo` centralizes version labels for UI/logs/diagnostics.
-- `TransformController` is the only owner of transform commands from MainActivity and FloatService.
-- Main UI is preview-first: transforms update the preview immediately, then legacy backend apply is debounced.
-- Floating controls use the same controller path and no longer own Binder/TX/bake logic.
-- Start and Restore are merged into one state-aware button.
-- Status panel shows backend/replacement/transform/source state.
-- Media slots are displayed as thumbnail cards with `+` replace buttons.
-- Buttons use neon pressed/selected states for touch feedback.
+- [docs/APP_V27_RE_UNIFIED.md](docs/APP_V27_RE_UNIFIED.md) — протокол Binder (TX11–19, bake)
+- [docs/V25_RUNTIME_ARCHITECTURE.md](docs/V25_RUNTIME_ARCHITECTURE.md) — runtime architecture
 
-Legacy backend path remains `TX14 -> TX11`; `TX24` is still not used for geometry transform and `TX25` remains reserved for hard recovery only.
+## Ветки
 
-
-## v24 compact-stable-ui
-- Compact controls (~1/3 shorter buttons).
-- Advanced panel toggles instead of duplicating.
-- Main/floating transform buttons are preview-first; PLAY / COMMIT applies to legacy backend.
-- Cached thumbnails and lower-cost preview rendering reduce UI stalls.
-- Version bumped to 0.24-v24-compact-stable-ui.
+| Ветка | Содержимое |
+|-------|------------|
+| `cursor/recon-unified-e3a1` | IceCam Pro (текущая разработка) |
+| `cursor/re-testicecam2-e3a1` | RE testicecam2.apk + clone + retool |
