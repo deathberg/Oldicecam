@@ -1,0 +1,45 @@
+/data/local/tmp:
+total 197153
+drwxrwx--x 3 shell   shell       3452 2026-06-27 18:29 .
+drwxr-x--x 9 root    root        3452 2023-05-07 17:08 ..
+-rw-r--r-- 1 root    root           0 2026-06-26 18:14 .camrepl_out
+-rw-r--r-- 1 root    root      120906 2026-06-27 12:44 binder_sniff.log
+-rw-r--r-- 1 root    root     5529616 2026-06-26 17:51 camhook.frame
+-rw-r--r-- 1 root    root      313688 2026-06-26 18:18 camhook.jpg
+-rw-r--r-- 1 root    root    18800800 2026-06-26 18:18 camhook.shm
+-rw-r--r-- 1 root    root       27608 2026-06-27 11:57 frida-helper-190d93057c544fd5b9dded8721a2e9df.dex
+-rw-r--r-- 1 root    root       27608 2026-06-27 11:58 frida-helper-8ae42056cd39433d96c5e3f2061b8873.dex
+-rw-r--r-- 1 root    root       27608 2026-06-27 12:05 frida-helper-db109799d6134811b10b7de14e3cfad1.dex
+-rw-r--r-- 1 root    root       27608 2026-06-27 12:44 frida-helper-f751a85facf04851a9ea627291708bb0.dex
+-rw-r--r-- 1 root    root       27608 2026-06-27 12:02 frida-helper-f7cc1120a7744ea68e65cfa2a89d75f4.dex
+-rwxr-xr-x 1 root    root    56453232 2026-06-27 09:27 frida-inject
+-rwxr-xr-x 1 u0_a302 u0_a302 53489240 2026-06-27 08:24 frida-server
+-rw-r--r-- 1 root    root           0 2026-06-27 18:29 frida-server.log
+-rwxr-xr-x 1 root    root         908 2026-06-27 12:29 frida_attach_vcplax.sh
+-rw-r--r-- 1 root    root         303 2026-06-27 11:58 frida_error.log
+-rw-r--r-- 1 u0_a302 u0_a302    15166 2026-06-27 18:29 frida_hook_libvc.js
+drwxr-xr-x 3 root    root        3452 2026-06-27 03:47 icecam
+-rwxr-xr-x 1 root    root    53489240 2026-06-27 12:02 kworker_helper
+-rw------- 1 root    root       74584 2026-06-27 15:00 libvc++.so.real
+-rw------- 1 root    root     1291296 2026-06-27 15:00 libvc.so.real
+-rw-r--r-- 1 root    root       38091 2026-06-27 10:33 libvc_hooks.log
+-rw-r--r-- 1 root    root         629 2026-06-27 12:47 libvc_symbols.log
+-rw-r--r-- 1 root    root           6 2026-06-27 18:29 re_tool_injected_pids
+-rwxr-xr-x 1 root    root        4515 2026-06-27 18:29 re_tool_pull.sh
+-rw-r--r-- 1 root    root           0 2026-06-27 18:29 re_tool_session_active
+-rwxr-xr-x 1 root    root        2518 2026-06-27 18:29 re_tool_start_session.sh
+-rwxr-xr-x 1 root    root        1112 2026-06-27 18:29 re_tool_watchdog.sh
+-rwx------ 1 root    root    12027424 2026-06-27 15:00 vcplax.real
+-rw-r--r-- 1 root    root           0 2026-06-27 18:29 watchdog.log
+
+/data/local/tmp/icecam:
+total 13
+drwxr-xr-x 3 root  root  3452 2026-06-27 03:47 .
+drwxrwx--x 3 shell shell 3452 2026-06-27 18:29 ..
+-rwx------ 1 root  root   287 2026-06-27 06:20 launch_vcplax.sh
+drwxr-xr-x 2 root  root  3452 2026-06-27 03:26 mirror
+
+/data/local/tmp/icecam/mirror:
+total 6
+drwxr-xr-x 2 root root 3452 2026-06-27 03:26 .
+drwxr-xr-x 3 root root 3452 2026-06-27 03:47 ..

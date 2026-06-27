@@ -1,0 +1,14 @@
+total 0
+dr-x------ 2 root root  0 2026-06-27 18:29 .
+dr-xr-xr-x 9 root root  0 2026-06-27 18:29 ..
+lr-x------ 1 root root 64 2026-06-27 18:31 0 -> /dev/null
+l-wx------ 1 root root 64 2026-06-27 18:31 1 -> pipe:[9995998]
+l-wx------ 1 root root 64 2026-06-27 18:31 2 -> pipe:[9995999]
+lrwx------ 1 root root 64 2026-06-27 18:29 3 -> /dev/binderfs/binder
+lrwx------ 1 root root 64 2026-06-27 18:29 32 -> anon_inode:[eventfd]
+lrwx------ 1 root root 64 2026-06-27 18:29 33 -> anon_inode:[eventfd]
+lrwx------ 1 root root 64 2026-06-27 18:29 34 -> anon_inode:[eventfd]
+lrwx------ 1 root root 64 2026-06-27 18:29 35 -> anon_inode:[eventfd]
+lrwx------ 1 root root 64 2026-06-27 18:29 4 -> socket:[10008208]
+lrwx------ 1 root root 64 2026-06-27 18:29 5 -> socket:[10009781]
+lrwx------ 1 root root 64 2026-06-27 18:29 6 -> socket:[10093803]

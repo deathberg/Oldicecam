@@ -1,0 +1,25 @@
+# libvc: /tmp/arch_in/re_tool/deployed/data_libvc.so.real (1291296 bytes)
+# Ghidra base 0x100000, init @ file+0x774b0
+
+lib_name (keyOff=+0x8, key=0xb9):
+  libcameraservice.so
+
+sym_1 (keyOff=+0x7d, key=0x9e):
+  _ZN7android7camera319Camera3OutputStream25returnBufferCheckedLockedERKNS0_20camera_stream_bufferEllbiRKNSt3__16vectorImNS5_9allocatorImEEEEPNS_2spINS_5FenceEEE
+
+sym_2 (keyOff=+0x7f, key=0xcf):
+  _ZN7android7camera319Camera3OutputStream25returnBufferCheckedLockedERKNS0_20camera_stream_bufferElbRKNSt3__16vectorImNS5_9allocatorImEEEEPNS_2spINS_5FenceEEE
+
+sym_3 (keyOff=+0x29, key=0xba):
+  _ZN7android7camera319Camera3OutputStream25returnBufferCheckedLockedERK21camera3_stream_bufferxbRKNSt3__16vectorIjNS5_9allocatorIjEEEEPNS_2spINS_5FenceEEE
+
+sym_4 (keyOff=+0x4f, key=0xe1):
+  _ZN7android13Camera3Device22initializeCommonLockedEv
+
+sym_5 (keyOff=+0x44, key=0x93):
+  _ZN7android13Camera3Device10disconnectEv
+
+# Hook chain (libvc init @ 0x774b0):
+#   shadowhook_hook_sym_name(lib, sym1..3, FUN_77238/772e4/77370)
+#   on failure: sym4/5 -> FUN_773fc/77408 (trampolines to orig)
+#   pthread_create(FUN_78558) — worker waits for inject queue

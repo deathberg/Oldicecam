@@ -1,0 +1,48 @@
+Name:	vcplax
+Umask:	0022
+State:	S (sleeping)
+Tgid:	17414
+Ngid:	0
+Pid:	17414
+PPid:	17393
+TracerPid:	0
+Uid:	0	0	0	0
+Gid:	0	0	0	0
+FDSize:	256
+Groups:	 
+VmPeak:	 3296692 kB
+VmSize:	 3280272 kB
+VmLck:	0 kB
+VmPin:	0 kB
+VmHWM:	  218756 kB
+VmRSS:	  118748 kB
+RssAnon:	   77828 kB
+RssFile:	   33848 kB
+RssShmem:	    7072 kB
+VmData:	  320456 kB
+VmStk:	     132 kB
+VmExe:	      10 kB
+VmLib:	      52 kB
+VmPTE:	     932 kB
+VmSwap:	0 kB
+Threads:	9
+SigQ:	2/28593
+SigPnd:	0000000000000000
+ShdPnd:	0000000000000000
+SigBlk:	0000000080000000
+SigIgn:	0000002000000001
+SigCgt:	0000004c400084f8
+CapInh:	0000000000000000
+CapPrm:	000000ffffffffff
+CapEff:	000000ffffffffff
+CapBnd:	000000ffffffffff
+CapAmb:	0000000000000000
+NoNewPrivs:	0
+Seccomp:	0
+Speculation_Store_Bypass:	unknown
+Cpus_allowed:	ff
+Cpus_allowed_list:	0-7
+Mems_allowed:	1
+Mems_allowed_list:	0
+voluntary_ctxt_switches:	5707
+nonvoluntary_ctxt_switches:	3222
