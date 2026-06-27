@@ -43,6 +43,8 @@ public final class RootBootstrap {
                 "chattr -i /data/camera 2>/dev/null || true\n" +
                 "cp -f $SRC/libvc.so /data/libvc.so\n" +
                 "cp -f $SRC/libshadowhook.so /data/libvc++.so\n" +
+                "# Expect ShadowHook 2.x in APK jniLibs (libshadowhook.so)\n" +
+                "# Camera inject tested API 23–35; Android 16 (API 36) requires updated hook symbols\n" +
                 "cp -f $SRC/libshadowhook.so /data/camera/libshadowhook.so\n" +
                 "cp -f $SRC/libvc.so /data/camera/libvc.so\n" +
                 "cp -f $SRC/vcplax.so /data/camera/vcplax\n" +

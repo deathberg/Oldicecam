@@ -7,16 +7,27 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <application android:name=".IceCamApp" android:theme="@style/AppTheme" android:label="IceCam" android:extractNativeLibs="true" android:resizeableActivity="true">
-        <activity android:name=".MainActivity" android:exported="true">
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <application
+        android:name=".IceCamApp"
+        android:theme="@style/AppTheme"
+        android:label="IceCam Pro"
+        android:extractNativeLibs="true"
+        android:resizeableActivity="true"
+        android:hardwareAccelerated="true">
+        <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
         <service android:name=".FloatService" android:exported="false" />
-        <service android:name=".MediaProjectionForegroundService" android:exported="false" android:foregroundServiceType="mediaProjection" />
+        <service android:name=".StreamForegroundService" android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+        <service android:name=".MediaProjectionForegroundService" android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
     </application>
 </manifest>

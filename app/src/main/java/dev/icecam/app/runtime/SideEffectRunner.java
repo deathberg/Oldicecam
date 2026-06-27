@@ -4,6 +4,7 @@ import android.content.Context;
 import dev.icecam.app.AppLogger;
 import dev.icecam.app.BackendApplyQueue;
 import dev.icecam.app.RootBootstrap;
+import dev.icecam.app.StreamForegroundService;
 import dev.icecam.app.TransformState;
 import dev.icecam.app.VliveBinderClient;
 import java.util.concurrent.ExecutorService;
@@ -52,6 +53,7 @@ public final class SideEffectRunner {
                         ok = sendTransformBestEffort(state.transform);
                         String path = state.media.originalPath.length() > 0 ? state.media.originalPath : state.media.playPath;
                         if (path.length() > 0) BackendApplyQueue.get(context).enqueue(path, "runtime-start-" + c.source.name().toLowerCase(), true);
+                        StreamForegroundService.start(context);
                     } catch (Throwable t) { if (log != null) log.log("runtime", "start side effect failed #" + c.id + ": " + t); }
                     bus.dispatch(RuntimeCommand.opFinished(opId, ok));
                 });
@@ -60,7 +62,7 @@ public final class SideEffectRunner {
                 io.execute(() -> {
                     String opId = "restore-" + c.id;
                     boolean ok = false;
-                    try { root.restoreCamera(); binder.clearCache(); ok = true; }
+                    try { root.restoreCamera(); binder.clearCache(); StreamForegroundService.stop(context); ok = true; }
                     catch (Throwable t) { if (log != null) log.log("runtime", "restore side effect failed #" + c.id + ": " + t); }
                     bus.dispatch(RuntimeCommand.opFinished(opId, ok));
                 });
