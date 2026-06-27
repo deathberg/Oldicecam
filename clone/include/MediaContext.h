@@ -46,8 +46,11 @@ struct MediaContext {
 
     bool hardRecovery = false; // service BBinder+0x44 toggle (TX25)
 
-    // TX13 poll counters (globals DAT_00c79bf8.. in original)
-    int32_t pollCounters[5] = {0, 0, 0, 0, 0}; // c0=active, c1/c2=WxH flash
+    // TX13 poll counters (globals DAT_00c79bf8.. in original).
+    // Verified live (docs/RUNTIME_PROTOCOL_VERIFICATION.md):
+    //   c0=active/playing flag, c1=last frame width, c2=last frame height,
+    //   c3=network/RTMP counter (0 for local file), c4=queue/reserved.
+    int32_t pollCounters[5] = {0, 0, 0, 0, 0};
 };
 
 enum TxCode : uint32_t {
