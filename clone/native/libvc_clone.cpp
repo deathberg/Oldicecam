@@ -9,6 +9,7 @@
  */
 
 #include "MediaContext.h"
+#include "VcCloneLoader.h"
 
 #include <android/log.h>
 #include <binder/Binder.h>
@@ -30,80 +31,6 @@
 namespace vlive::clone {
 
 static constexpr const char* kDescriptor = "com.xiaomi.vlive.IMyBinderService";
-
-// ─── MediaPipeline stubs (replace with FFmpeg + AMediaCodec) ───────────────
-
-bool MediaPipeline::setMode(int mode, const std::string& pathOrUrl) {
-    std::lock_guard<std::mutex> lock(mu_);
-    teardownPipeline();
-    ctx_->mode = mode;
-    ctx_->sourcePath = pathOrUrl;
-    ALOGI("setMode mode=%d path=%s", mode, pathOrUrl.c_str());
-    if (mode == 1) return openLocalFile(pathOrUrl);
-    if (mode == 2) return openRtmpUrl(pathOrUrl);
-    return false;
-}
-
-bool MediaPipeline::playSource(const std::string& path, int /*mirrorIgnored*/, bool loop) {
-    std::lock_guard<std::mutex> lock(mu_);
-    ctx_->sourcePath = path;
-    ctx_->loop = loop;
-    ALOGI("playSource path=%s loop=%d", path.c_str(), loop);
-    running_ = true;
-    ctx_->pollCounters[0]++;  // placeholder: frames/sessions started
-    return true;
-}
-
-void MediaPipeline::stop() {
-    std::lock_guard<std::mutex> lock(mu_);
-    ALOGI("stop");
-    running_ = false;
-    teardownPipeline();
-}
-
-int MediaPipeline::getStatus() const {
-    return running_ ? STATUS_PLAYING : 0;
-}
-
-void MediaPipeline::seekRange(int64_t beginMs, int64_t endMs) {
-    std::lock_guard<std::mutex> lock(mu_);
-    ctx_->seekBeginMs = beginMs;
-    ctx_->seekEndMs = endMs;
-    ALOGI("seekRange %lld..%lld ms", (long long)beginMs, (long long)endMs);
-    // Original: FUN_00541f7c(ctx, beginUs, endUs)
-}
-
-void MediaPipeline::setTransform(const MediaContext::TransformState& t) {
-    std::lock_guard<std::mutex> lock(mu_);
-    ctx_->transform = t;
-    ALOGI("transform mode=%d x=%.2f y=%.2f int=%.3f dia=%.3f color=%d",
-          t.mode, t.x, t.y, t.intensity, t.diameter, t.colorMode);
-}
-
-void MediaPipeline::onFrameDecoded() {
-    ctx_->pollCounters[1]++;  // placeholder: decoded frames
-}
-
-void MediaPipeline::onNetworkStats(int32_t bytesPerSec) {
-    ctx_->pollCounters[4] = bytesPerSec;
-}
-
-bool MediaPipeline::openLocalFile(const std::string& path) {
-    ALOGI("openLocalFile %s (avformat_open_input + AMediaCodec decoder)", path.c_str());
-    // TODO: avformat_open_input, find video stream, AMediaCodec_createDecoderByType("video/avc")
-    return true;
-}
-
-bool MediaPipeline::openRtmpUrl(const std::string& url) {
-    ALOGI("openRtmpUrl %s (libavformat rtmp:// + ffrtmpcrypt)", url.c_str());
-    // TODO: AVDictionary rtmp options, avformat_open_input, custom IO for inject
-    return true;
-}
-
-void MediaPipeline::teardownPipeline() {
-    // TODO: avformat_close_input, AMediaCodec_delete, join decode thread
-    running_ = false;
-}
 
 // ─── BBinder service ───────────────────────────────────────────────────────
 
@@ -312,7 +239,13 @@ using android::String16;
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        ALOGE("usage: %s <service_name>", argv[0]);
+        ALOGE("usage: %s <service_name> [libvc_path]", argv[0]);
+        return 1;
+    }
+
+    const char* libvcPath = (argc >= 3) ? argv[2] : "/data/libvc.so";
+    if (!vlive::clone::loadLibVc(libvcPath)) {
+        ALOGE("libvc load failed — inject hooks unavailable");
         return 1;
     }
 

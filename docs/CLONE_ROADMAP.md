@@ -243,8 +243,17 @@ After transform: TX24(floats) — does not restart demux unless app replays TX14
 ```text
 clone/
   CMakeLists.txt
-  include/MediaContext.h      — shared state + TX13 counters
-  native/libvc_clone.cpp      — BBinder onTransact all 11 UI codes
+  include/
+    MediaContext.h       — shared state + TX13 counters + MediaPipeline API
+    FrameInjectQueue.h   — NV12 latest-frame queue (WxH keyed)
+    HookSymbols.h        — decoded libcameraservice.so mangled symbols
+    VcCloneLoader.h      — dlopen /data/libvc.so + init()
+  native/
+    libvc_clone.cpp      — BBinder onTransact (vcplax daemon)
+    libvc_inject.cpp     — init() + ShadowHook + GraphicBuffer NV12 inject
+    media_pipeline.cpp   — decode thread stub (~30fps test pattern)
+    FrameInjectQueue.cpp
+    vc_clone_loader.cpp  — dlopen bridge for vcplax → libvc.so
 ```
 
 ### Build (NDK cross-compile)
@@ -255,7 +264,12 @@ cmake -B clone/build -S clone \
   -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
   -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-33
 cmake --build clone/build
-# deploy: adb push clone/build/vcplax_clone /data/vcplax_clone
+# deploy:
+adb push clone/build/vcplax_clone /data/vcplax
+adb push clone/build/libvc_clone.so /data/libvc.so
+# libvc++.so = APK libshadowhook.so (unchanged)
+chmod 700 /data/vcplax
+/data/vcplax dataloader_managerhow
 ```
 
 ### What's implemented vs TODO
@@ -266,8 +280,12 @@ cmake --build clone/build
 | Parcel read/write | ✅ | — |
 | FFmpeg demux | stub log | link static ffmpeg like vcplax |
 | AMediaCodec | stub log | decoder + inject surface |
-| libvc inject | **not in clone** | separate `libvc_inject.so` + ShadowHook |
-| TX13 counters | placeholder ints | wire from decode thread |
+| libvc inject | ✅ `libvc_clone.so` | ashmem IPC if hooks run out-of-process |
+| ShadowHook 3× returnBuffer + disconnect | ✅ | verify on device ABI |
+| GraphicBuffer lockYCbCr inject | ✅ dlsym libui | buffer_prep_helper -0x60 slot path |
+| Frame queue | ✅ in-process | ashmem/IMemory cross-process (original) |
+| TX13 counters | ✅ decode thread | wire from real decoder |
+| vcplax dlopen libvc + init | ✅ | match original LoadedLib cfg struct |
 
 ### Architecture target
 
@@ -279,19 +297,27 @@ flowchart TB
     end
     subgraph daemon [vcplax_clone]
         BT[BBinder onTransact]
-        MP[MediaPipeline FFmpeg+NDK]
+        MP[MediaPipeline decode thread]
         TX13[pollCounters int5]
+        LD[dlopen libvc.so init]
     end
-    subgraph inject [libvc_inject.so future]
+    subgraph libvc [libvc_clone.so]
+        Q[FrameInjectQueue]
         SH[ShadowHook]
-        GB[GraphicBuffer lock hook]
+        GB[GraphicBuffer lockYCbCr]
+    end
+    subgraph system [libcameraservice.so]
+        RB[returnBufferCheckedLocked]
     end
     UI --> BC
     BC -->|Binder IPC| BT
     BT --> MP
+    MP -->|vc_clone_publish_frame| Q
+    LD --> SH
+    SH --> RB
+    RB --> GB
+    GB --> Q
     MP --> TX13
-    MP -->|YUV frames| GB
-    SH --> GB
 ```
 
 ---
@@ -314,7 +340,7 @@ flowchart TB
 | Binder IPC | 98 → **100** (after TX13 labels) |
 | vcplax media pipeline | 85 → **92** |
 | libvc hook targets | 55 → **80** (after HOOK_SYM capture) |
-| End-to-end clone | 75 → **85** (after vcplax_clone + demux stub) |
+| End-to-end clone | 75 → **90** (libvc_clone.so + inject queue + decode stub) |
 
 ---
 
