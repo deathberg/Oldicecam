@@ -239,7 +239,11 @@ Float overlay (FloatService / App.m1774h)
 
 ---
 
-## 12. Как повторить декompиляцию
+## 12. Расширенный native RE
+
+См. [docs/NATIVE_REVERSE_MAX.md](NATIVE_REVERSE_MAX.md) — LIEF, Capstone, xref-скан, адреса TX11–25, строка `%8ld: Replaced %5d blocks by color %X`.
+
+## 13. Как повторить декompиляцию
 
 ```bash
 # jadx
