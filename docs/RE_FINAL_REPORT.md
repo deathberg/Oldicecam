@@ -266,13 +266,14 @@ flowchart LR
 
 ### Код TODO ❌
 
-- [ ] `MediaPipeline`: FFmpeg + AMediaCodec (`clone/native/libvc_clone.cpp`)
-- [ ] `libvc_replacement.so`: ShadowHook on decoded symbols
-- [ ] Frame queue producer (vcplax side) ↔ consumer (libvc inject)
+- [ ] `MediaPipeline`: FFmpeg + AMediaCodec (`clone/native/media_pipeline.cpp`)
+- [x] `libvc_clone.so`: ShadowHook on decoded symbols (`clone/native/libvc_inject.cpp`)
+- [x] Frame queue producer ↔ consumer (in-process via dlopen + `vc_clone_publish_frame`)
+- [ ] ashmem/IMemory cross-process frame transport
 - [ ] Deploy `/data/vcplax` + random ServerName from prefs
 - [ ] E2E on device
 
-Skeleton: `clone/native/libvc_clone.cpp`, `clone/include/MediaContext.h`
+Skeleton: `clone/` — binder, inject, frame queue, decode stub
 
 ---
 
