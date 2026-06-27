@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_label">新相机(1926内核-克隆)</string>
+    <string name="title_home">首页</string>
+    <string name="title_controller">控制</string>
+    <string name="title_settings">设置</string>
+</resources>
