@@ -69,24 +69,48 @@ sleep 2
 frida-ps -U
 ```
 
-### Hook vcplax
+### Hook vcplax (native-only daemon — NO Java)
+
+**Важно:** `vcplax` — нативный C/C++ процесс без ART/JVM.  
+Не используй `Java.perform`. Для `frida-inject` обязателен **`--runtime=qjs`**, иначе internal-agent падает с `invalid address` (java-bridge).
 
 ```bash
+# SELinux (частая причина invalid address)
+tsu -c "setenforce 0"
+
+# frida-server от root
+tsu -c "pkill frida-server; /data/local/tmp/frida-server -D &"
+sleep 2
+
+# приложение открыто!
+PID=$(tsu -c "pidof vcplax")
+echo "PID=$PID"
+
 curl -LO https://raw.githubusercontent.com/deathberg/Oldicecam/cursor/apk-full-reverse-e3a1/tools/termux/frida_hook_libvc.js
 
-# приложение должно быть открыто!
-tsu -c "pidof vcplax"    # должен показать число
+# способ A — frida CLI (рекомендуется)
+frida -U -p "$PID" -l frida_hook_libvc.js -o ~/libvc_hooks.log --runtime=qjs
 
-frida -U -n vcplax -l frida_hook_libvc.js -o ~/libvc_hooks.log
+# способ B — frida-inject на устройстве
+cp ~/frida_hook_libvc.js /data/local/tmp/
+/data/local/tmp/frida-inject -p "$PID" \
+  -s /data/local/tmp/frida_hook_libvc.js --runtime=qjs \
+  > /data/local/tmp/libvc_hooks.log
 ```
 
-Поиграй в приложении 30–60 сек (смена источника, transform), **Ctrl+C**, пришли `~/libvc_hooks.log`.
-
-Если `-n vcplax` не находит процесс:
+Поиграй в приложении 30–60 сек, **Ctrl+C**, проверь лог:
 
 ```bash
-PID=$(tsu -c "pidof vcplax")
-frida -U -p "$PID" -l frida_hook_libvc.js -o ~/libvc_hooks.log
+grep -E 'HOOK_SYM|BINDER_TX|shadowhook_init|dlopen' ~/libvc_hooks.log /data/local/tmp/libvc_hooks.log 2>/dev/null
+cp ~/libvc_hooks.log /sdcard/Download/ 2>/dev/null
+cp /data/local/tmp/libvc_hooks.log /sdcard/Download/ 2>/dev/null
+```
+
+Ожидаемые строки:
+
+```
+HOOK_SYM lib=libui.so sym=_ZN7android13GraphicBuffer... replace=0x...
+BINDER_TX code=11 (0xb)
 ```
 
 ### Частые ошибки

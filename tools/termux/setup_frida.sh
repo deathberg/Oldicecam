@@ -73,12 +73,12 @@ cat <<'EOF'
 2) Download hook script:
      curl -LO https://raw.githubusercontent.com/deathberg/Oldicecam/cursor/apk-full-reverse-e3a1/tools/termux/frida_hook_libvc.js
 
-3) Attach and log:
-     frida -U -n vcplax -l frida_hook_libvc.js -o ~/libvc_hooks.log
-
-   If -n fails, use PID:
+3) Attach (native-only, NO Java — use qjs runtime):
+     tsu -c "setenforce 0"
      PID=$(tsu -c "pidof vcplax")
-     frida -U -p $PID -l frida_hook_libvc.js -o ~/libvc_hooks.log
+     frida -U -p $PID -l frida_hook_libvc.js -o ~/libvc_hooks.log --runtime=qjs
+     # or frida-inject:
+     # /data/local/tmp/frida-inject -p $PID -s frida_hook_libvc.js --runtime=qjs > /data/local/tmp/libvc_hooks.log
 
 4) Use the app 30-60 sec (play source, transform), Ctrl+C, send ~/libvc_hooks.log
 
