@@ -25,6 +25,7 @@ public final class NativeExtractor {
             if (!outDir.exists() && !outDir.mkdirs()) sb.append("mkdir failed: ").append(outDir).append('\n');
             ZipFile zip = new ZipFile(ctx.getApplicationInfo().sourceDir);
             String[] names = {"libvc.so", "libshadowhook.so", "vcplax.so"};
+            // Package ShadowHook 2.x as libshadowhook.so + libvc.so + vcplax.so per ABI in APK lib/<abi>/
             for (String n : names) {
                 String entryName = "lib/" + abi + "/" + n;
                 ZipEntry e = zip.getEntry(entryName);

@@ -1,5 +1,0 @@
-# Python deps for native reverse-engineering scripts
-lief>=0.14
-capstone>=5.0
-pyelftools>=0.31
-unicorn>=2.0

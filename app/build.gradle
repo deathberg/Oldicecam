@@ -7,8 +7,8 @@ android {
         applicationId 'dev.icecam.app'
         minSdk 23
         targetSdk 35
-        versionCode 26
-        versionName '0.26-v26-re-capture'
+        versionCode 28
+        versionName '0.28-state-ui'
     }
     buildTypes {
         debug { debuggable true; minifyEnabled false }
@@ -16,4 +16,8 @@ android {
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     packaging { jniLibs { useLegacyPackaging true } }
+}
+
+dependencies {
+    // Pure Java UI — no extra deps; native libs packaged in jniLibs/
 }

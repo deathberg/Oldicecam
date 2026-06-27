@@ -21,16 +21,11 @@ public final class MediaTransformer {
     private static final int MAX_BAKED_FILES = 12;
     private static final long MAX_BAKED_AGE_MS = 6L * 60L * 60L * 1000L;
 
-    public static boolean isImagePath(String path) {
-        if (path == null) return false;
-        String p = path.toLowerCase(Locale.US);
-        return p.endsWith(".jpg") || p.endsWith(".jpeg") || p.endsWith(".png") || p.endsWith(".webp") || p.endsWith(".bmp");
-    }
+    public static boolean isImagePath(String path) { return MediaPreviewEngine.isImagePath(path); }
+    public static boolean isVideoPath(String path) { return MediaPreviewEngine.isVideoPath(path); }
 
-    public static boolean isVideoPath(String path) {
-        if (path == null) return false;
-        String p = path.toLowerCase(Locale.US);
-        return p.endsWith(".mp4") || p.endsWith(".mkv") || p.endsWith(".webm") || p.endsWith(".mov") || p.endsWith(".avi") || p.endsWith(".3gp");
+    public static String bakeImage(Context ctx, String sourcePath, StreamGeometry s, AppLogger log) {
+        return bakeImage(ctx, sourcePath, s == null ? new StreamGeometry().toPreviewTransform() : s.toPreviewTransform(), log);
     }
 
     public static String bakeImage(Context ctx, String sourcePath, TransformState s, AppLogger log) {
@@ -40,28 +35,13 @@ public final class MediaTransformer {
             return sourcePath;
         }
         try {
-            BitmapFactory.Options probe = new BitmapFactory.Options();
-            probe.inJustDecodeBounds = true;
-            BitmapFactory.decodeFile(sourcePath, probe);
-            if (probe.outWidth <= 0 || probe.outHeight <= 0) {
-                if (log != null) log.log("bake", "decode bounds failed source=" + sourcePath);
-                return sourcePath;
-            }
-
-            int srcW0 = probe.outWidth;
-            int srcH0 = probe.outHeight;
-            int sample = 1;
-            while (Math.max(srcW0 / sample, srcH0 / sample) > MAX_OUTPUT_DIM) sample *= 2;
-
-            BitmapFactory.Options opt = new BitmapFactory.Options();
-            opt.inPreferredConfig = Bitmap.Config.ARGB_8888;
-            opt.inDither = true;
-            opt.inSampleSize = sample;
-            Bitmap src = BitmapFactory.decodeFile(sourcePath, opt);
+            Bitmap src = MediaPreviewEngine.decodeImage(ctx, sourcePath, MAX_OUTPUT_DIM, true);
             if (src == null) {
                 if (log != null) log.log("bake", "decode failed source=" + sourcePath);
                 return sourcePath;
             }
+            int srcW0 = src.getWidth();
+            int srcH0 = src.getHeight();
 
             int srcW = src.getWidth();
             int srcH = src.getHeight();
@@ -180,48 +160,10 @@ public final class MediaTransformer {
 
 
     public static Bitmap renderPreview(Context ctx, String sourcePath, TransformState s, int maxW, int maxH) {
-        if (sourcePath == null || sourcePath.trim().isEmpty() || !isImagePath(sourcePath)) return null;
-        try {
-            BitmapFactory.Options probe = new BitmapFactory.Options();
-            probe.inJustDecodeBounds = true;
-            BitmapFactory.decodeFile(sourcePath, probe);
-            if (probe.outWidth <= 0 || probe.outHeight <= 0) return null;
-            int sample = 1;
-            while (Math.max(probe.outWidth / sample, probe.outHeight / sample) > 1400) sample *= 2;
-            BitmapFactory.Options opt = new BitmapFactory.Options();
-            opt.inPreferredConfig = Bitmap.Config.ARGB_8888;
-            opt.inDither = true;
-            opt.inSampleSize = sample;
-            Bitmap src = BitmapFactory.decodeFile(sourcePath, opt);
-            if (src == null) return null;
-
-            int outW = Math.max(240, maxW > 0 ? maxW : 720);
-            int outH = Math.max(240, maxH > 0 ? maxH : 720);
-            Bitmap out = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888);
-            Canvas c = new Canvas(out);
-            c.drawColor(Color.BLACK);
-
-            float sw = src.getWidth();
-            float sh = src.getHeight();
-            float base;
-            if (s.mode == TransformState.MODE_FILL) base = Math.max(outW / sw, outH / sh);
-            else if (s.mode == TransformState.MODE_STRETCH) base = 1f;
-            else base = Math.min(outW / sw, outH / sh);
-            Matrix m = new Matrix();
-            m.postTranslate(-sw / 2f, -sh / 2f);
-            if (s.mirrorH()) m.postScale(-1f, 1f);
-            if (s.mirrorV()) m.postScale(1f, -1f);
-            m.postRotate(s.rotationQuadrant() * 90f);
-            if (s.mode == TransformState.MODE_STRETCH) m.postScale((outW / sw) * s.zoomX, (outH / sh) * s.zoomY);
-            else m.postScale(base * s.zoomX, base * s.zoomY);
-            m.postTranslate(outW / 2f + s.panX * (outW / 2f), outH / 2f - s.panY * (outH / 2f));
-            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
-            c.drawBitmap(src, m, paint);
-            src.recycle();
-            return out;
-        } catch (Throwable ignored) {
-            return null;
-        }
+        if (sourcePath == null || sourcePath.trim().isEmpty()) return null;
+        int outW = Math.max(240, maxW > 0 ? maxW : 720);
+        int outH = Math.max(240, maxH > 0 ? maxH : 720);
+        return MediaPreviewEngine.renderWithTransform(ctx, sourcePath, s, outW, outH);
     }
 
 }
