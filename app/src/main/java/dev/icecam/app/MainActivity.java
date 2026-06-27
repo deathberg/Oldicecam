@@ -280,8 +280,11 @@ public class MainActivity extends Activity {
         LinearLayout r = row();
         r.addView(bigButton("FLOAT", v -> startFloatPanel(), UiKit.PANEL_3), weight());
         r.addView(bigButton("LOG", v -> shareLog(), UiKit.PANEL_3), weight());
-        r.addView(bigButton("OVERLAY", v -> openOverlaySettings(), UiKit.PANEL_3), weight());
+        r.addView(bigButton("RE", v -> startActivity(new android.content.Intent(this, dev.icecam.app.recapture.ReCaptureActivity.class)), UiKit.CYAN_DARK), weight());
         advancedPanel.addView(r);
+        LinearLayout r2 = row();
+        r2.addView(bigButton("OVERLAY", v -> openOverlaySettings(), UiKit.PANEL_3), weight());
+        advancedPanel.addView(r2);
         int index = body.indexOfChild(mediaLabel);
         if (index < 0) index = body.getChildCount();
         body.addView(advancedPanel, index, new LinearLayout.LayoutParams(-1, -2));
