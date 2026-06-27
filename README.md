@@ -4,6 +4,8 @@ Ready-to-upload Android project for GitHub Actions.
 
 ## APK reverse engineering (testicecam2.apk)
 
+- **Consolidated status (95%):** [docs/RE_CONSOLIDATED_REPORT.md](docs/RE_CONSOLIDATED_REPORT.md)
+- **Next targets + pull audit:** [docs/RE_NEXT_STEPS.md](docs/RE_NEXT_STEPS.md)
 - Full report: [docs/APK_FULL_REVERSE_ENGINEERING.md](docs/APK_FULL_REVERSE_ENGINEERING.md)
 - Extended native RE: [docs/NATIVE_REVERSE_MAX.md](docs/NATIVE_REVERSE_MAX.md)
 - RE workspace setup: [re-workspace/README.md](re-workspace/README.md)
