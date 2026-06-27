@@ -72,56 +72,61 @@ frida-ps -U
 ### Hook vcplax (native-only daemon — NO Java)
 
 **Важно:** `vcplax` — нативный C/C++ процесс без ART/JVM.  
-Не используй `Java.perform`. Для `frida-inject` обязателен **`--runtime=qjs`**, иначе internal-agent падает с `invalid address` (java-bridge).
+**Никогда** не используй `Java.perform`. Для **любого** `frida-inject` обязателен **`--runtime=qjs`**, иначе `invalid address` (java-bridge / patchCode).
+
+| Процесс | Что ловим | Команда |
+|---|---|---|
+| **vcplax** | Binder TX, HOOK_SYM, XOR, TX13 | `frida_attach_vcplax.sh` или spawn |
+| **com.potplayer.music** | только passive dlopen + подсказки | `frida_attach_app.sh` |
 
 ```bash
-# SELinux (частая причина invalid address)
-tsu -c "setenforce 0"
+# SELinux
+su -c "setenforce 0"
 
-# frida-server от root
-tsu -c "pkill frida-server; /data/local/tmp/frida-server -D &"
+# frida-server (root)
+su -c "pkill frida-server; /data/local/tmp/frida-server -D &"
 sleep 2
 
-# приложение открыто!
-PID=$(tsu -c "pidof vcplax")
-echo "PID=$PID"
-
+# скачать скрипты (проверь что не 404: head -1 file)
 curl -LO https://raw.githubusercontent.com/deathberg/Oldicecam/cursor/apk-full-reverse-e3a1/tools/termux/frida_hook_libvc.js
+curl -LO https://raw.githubusercontent.com/deathberg/Oldicecam/cursor/apk-full-reverse-e3a1/tools/termux/frida_spawn_vcplax.sh
+curl -LO https://raw.githubusercontent.com/deathberg/Oldicecam/cursor/apk-full-reverse-e3a1/tools/termux/frida_attach_vcplax.sh
+curl -LO https://raw.githubusercontent.com/deathberg/Oldicecam/cursor/apk-full-reverse-e3a1/tools/termux/frida_attach_app.sh
+chmod +x frida_*.sh
+cp frida_hook_libvc.js frida_*.sh /data/local/tmp/
 
-# способ A — frida CLI (рекомендуется)
-frida -U -p "$PID" -l frida_hook_libvc.js -o ~/libvc_hooks.log --runtime=qjs
+# A) Spawn vcplax (лучше для HOOK_SYM — libvc ещё не загружена)
+#    frida-inject НЕ поддерживает --no-pause!
+/data/local/tmp/frida_spawn_vcplax.sh
 
-# способ B — frida-inject на устройстве
-cp ~/frida_hook_libvc.js /data/local/tmp/
-/data/local/tmp/frida-inject -p "$PID" \
-  -s /data/local/tmp/frida_hook_libvc.js --runtime=qjs \
-  > /data/local/tmp/libvc_hooks.log
+# B) Attach к уже запущенному vcplax
+/data/local/tmp/frida_attach_vcplax.sh
+
+# C) Attach к app (passive, без Binder)
+/data/local/tmp/frida_attach_app.sh
 ```
 
-Поиграй в приложении 30–60 сек, **Ctrl+C**, проверь лог:
+Поиграй 30–60 сек, **Ctrl+C**, проверь лог:
 
 ```bash
-grep -E 'HOOK_SYM|BINDER_TX|shadowhook_init|dlopen' ~/libvc_hooks.log /data/local/tmp/libvc_hooks.log 2>/dev/null
-cp ~/libvc_hooks.log /sdcard/Download/ 2>/dev/null
-cp /data/local/tmp/libvc_hooks.log /sdcard/Download/ 2>/dev/null
+grep -E 'HOOK_SYM|XOR_STATIC|POLL_STATE|TX seq=' /data/local/tmp/libvc_symbols.log
 ```
 
 Ожидаемые строки:
 
 ```
-HOOK_SYM lib=libui.so sym=_ZN7android13GraphicBuffer... replace=0x...
-[POLL_STATE] seq=42 counters=[c0=...] DELTA {c1:...->...}
+[OK] hook installed: onTransact @ ...
+[HOOK_SYM] lib="libui.so" sym="_ZN7android13GraphicBuffer..."
+[POLL_STATE] #42 120,3599,0,0,51200
 ```
 
 ### Spawn vcplax (для HOOK_SYM / XOR — libvc ещё не загружена)
 
-Attach к уже запущенному `vcplax` **не ловит** `shadowhook_hook_sym_name`. Нужен spawn:
+Attach к уже запущенному `vcplax` **не ловит** `shadowhook_hook_sym_name`. Нужен spawn через `frida_spawn_vcplax.sh` (без `--no-pause`).
 
 ```bash
-curl -LO https://raw.githubusercontent.com/deathberg/Oldicecam/cursor/apk-full-reverse-e3a1/tools/termux/frida_hook_libvc.js
-curl -LO https://raw.githubusercontent.com/deathberg/Oldicecam/cursor/apk-full-reverse-e3a1/tools/termux/frida_spawn_vcplax.sh
-chmod +x frida_spawn_vcplax.sh
 cp frida_hook_libvc.js frida_spawn_vcplax.sh /data/local/tmp/
+chmod +x /data/local/tmp/frida_spawn_vcplax.sh
 tsu -c 'setenforce 0; /data/local/tmp/frida_spawn_vcplax.sh'
 grep -E 'HOOK_SYM|XOR_STATIC|POLL_STATE' /data/local/tmp/libvc_symbols.log
 ```
@@ -130,11 +135,13 @@ grep -E 'HOOK_SYM|XOR_STATIC|POLL_STATE' /data/local/tmp/libvc_symbols.log
 
 | Ошибка | Решение |
 |---|---|
-| `pip` / `Building wheel for frida` | Не pip! Только `pkg install frida frida-python` |
-| `Unable to connect` | `tsu -c "/data/local/tmp/frida-server -D &"` |
-| `Process not found` | Сначала открой приложение, проверь `pidof vcplax` |
-| `version mismatch` | Версия server = `frida --version` |
-| `which: not found` при pip | `pkg install which` (но pip всё равно не нужен) |
+| `invalid address` / java-bridge | **Всегда** `--runtime=qjs`. Не inject в app без qjs |
+| `Unknown option --no-pause` | Убери `--no-pause` — Termux frida-inject не поддерживает |
+| `404: Not Found` в скрипте | `curl` скачал HTML-ошибку — `head -1 script.sh`, перекачай |
+| `Cannot parse integer ?? for -p` | `PID` пустой — `pidof vcplax` после запуска app |
+| `Process not found` | Запусти app, подожди 5s, `pidof vcplax` |
+| frida-server Aborted | Запускай server от root: `su -c '/data/local/tmp/frida-server -D &'` |
+| HOOK_SYM пустой при attach | libvc уже loaded — используй `frida_spawn_vcplax.sh` |
 
 ## Что особенно полезно прислать
 

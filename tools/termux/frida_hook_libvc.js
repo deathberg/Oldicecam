@@ -1,27 +1,43 @@
-// vcplax native instrumentation: Binder sniffer + TX13 delta + libvc XOR symbol capture.
-// Attach:  frida-inject -p $(pidof vcplax) -s frida_hook_libvc.js --runtime=qjs
-// Spawn:   see frida_spawn_vcplax.sh (hooks dlopen before libvc init)
+// frida_hook_libvc.js v4 — smart / self-healing / native-only (QuickJS)
+//
+// IMPORTANT: always use --runtime=qjs (never default V8/java-bridge on native vcplax)
+//
+// Attach daemon (Binder + libvc XOR):
+//   PID=$(pidof vcplax) && /data/local/tmp/frida-inject -p "$PID" \
+//     -s /data/local/tmp/frida_hook_libvc.js --runtime=qjs
+//
+// Attach app (passive profile — polls vcplax, no Java hooks):
+//   PID=$(pidof com.potplayer.music) && /data/local/tmp/frida-inject -p "$PID" \
+//     -s /data/local/tmp/frida_hook_libvc.js --runtime=qjs
+//
+// Spawn vcplax (best for HOOK_SYM before libvc init):
+//   /data/local/tmp/frida_spawn_vcplax.sh
 'use strict';
 
+// ─── Config ───────────────────────────────────────────────────────────────────
 var CONFIG = {
+  TARGET_APP: 'com.potplayer.music',
+  TARGET_DAEMON_NAMES: ['vcplax', '/data/vcplax'],
+
+  POLL_MS: 2000,
+  POLL_MAX_ATTEMPTS: 0, // 0 = forever
+
   ONTRANSACT_OFFSET: ptr('0x43f8b4'),
-  LIBVC_INIT_OFFSET: ptr('0x774b0'),       // file VA in libvc.so (arm64)
+  LIBVC_INIT_OFFSET: ptr('0x774b0'),
   DUMP_LEN: 128,
-  MAX_INTS: 12,
   DESCRIPTOR: 'com.xiaomi.vlive.IMyBinderService',
 
-  // TX13: no full hexdump blocks; log int[5] reply only when values change
   SUPPRESS_POLL_FULL: true,
   POLL_PARSE_REPLY: true,
   POLL_LOG_DELTA_ONLY: true,
   POLL_SUMMARY_EVERY: 60,
 
-  // XOR / hook symbol capture
   HOOK_DLOPEN: true,
   HOOK_DLSYM: true,
   HOOK_SHADOWHOOK: true,
   HOOK_LIBVC_INIT: true,
   DUMP_XOR_RODATA: true,
+
   XOR_BLOB_OFFSETS: [
     { off: ptr('0x14ae86'), len: 0x13, keyOff: 0x08, name: 'lib_name' },
     { off: ptr('0x14ae99'), len: 0x9f, keyOff: 0x7d, name: 'sym_1' },
@@ -29,9 +45,7 @@ var CONFIG = {
     { off: ptr('0x14afd5'), len: 0x99, keyOff: 0x29, name: 'sym_3' },
     { off: ptr('0x14b06e'), len: 0x34, keyOff: 0x4f, name: 'sym_4' },
     { off: ptr('0x14b0a2'), len: 0x28, keyOff: 0x51, name: 'sym_5' }
-  ],
-
-  FULL_BLOCK_CODES: null
+  ]
 };
 
 var TX_NAMES = {
@@ -40,71 +54,154 @@ var TX_NAMES = {
   19: 'SET_MIRROR', 22: 'SEEK_RANGE', 24: 'TRANSFORM', 25: 'HARD_RECOVERY'
 };
 
-var TX_JAVA_HINT = {
-  11: 'writeString path + int0 + loop',
-  12: 'empty + reply int',
-  13: 'empty IN -> int[5] OUT (pipeline counters)',
-  14: 'writeInt mode + writeString path',
-  15: 'empty -> status int (5=playing)',
-  16: 'writeInt bool loop-rotate flag',
-  17: 'writeInt bool loop',
-  18: 'writeInt degrees (0/90/180/270)',
-  19: 'writeInt bool mirror',
-  22: 'writeLong beginUs + writeLong endUs',
-  24: 'int mode + 4x float + int colorMode',
-  25: 'empty -> toggle recovery (reply void)'
-};
-
 var PARCEL_LAYOUTS = [
   { data: 0x08, size: 0x10, pos: 0x20, cap: 0x18 },
   { data: 0x10, size: 0x18, pos: 0x28, cap: 0x20 },
   { data: 0x00, size: 0x08, pos: 0x10, cap: 0x0c }
 ];
 
-var seq = 0;
-var pollCount = 0;
-var pollSummaryLast = 0;
-var lastPollCounters = null;
-var shadowhookInstalled = false;
-var libvcInitHooked = false;
-var onTransactInstalled = false;
-var libvcHookStatePtr = null;
+// ─── Runtime state ────────────────────────────────────────────────────────────
+var STATE = {
+  profile: null,
+  processName: '',
+  tick: 0,
+  hooks: {},
+  seq: 0,
+  pollCount: 0,
+  pollSummaryLast: 0,
+  lastPollCounters: null
+};
 
-function log(msg) { console.log(msg); }
-
-function line(ch, n) {
-  var s = '';
-  for (var i = 0; i < n; i++) s += ch;
-  return s;
+// ─── Logging ─────────────────────────────────────────────────────────────────
+function ts() {
+  return new Date().toISOString().replace('T', ' ').replace('Z', '');
 }
 
-function txName(code) { return TX_NAMES[code] || ('UNKNOWN_' + code); }
+function log(level, msg) {
+  console.log('[' + ts() + '][' + level + '][' + (STATE.profile || '?') + '] ' + msg);
+}
 
-function readCppString(p) {
-  if (p.isNull()) return '<null>';
+function logInfo(m) { log('INFO', m); }
+function logOk(m) { log('OK', m); }
+function logWarn(m) { log('WARN', m); }
+function logErr(m) { log('ERR', m); }
+
+// ─── Process context ─────────────────────────────────────────────────────────
+function readCmdline() {
   try {
-    var tag = p.readU8();
-    if ((tag & 1) === 0) return p.add(1).readUtf8String();
-    var len = p.add(8).readU64();
-    var data = p.add(16).readPointer();
-    if (data.isNull()) return '<empty>';
-    return data.readUtf8String(Number(len));
+    var f = new File('/proc/self/cmdline', 'r');
+    var raw = f.read();
+    f.close();
+    if (!raw) return '';
+    var parts = raw.split('\0');
+    return parts[0] || raw.replace(/\0/g, ' ').trim().split(' ')[0];
   } catch (e) {
-    return '<err:' + e + '>';
+    return '';
   }
+}
+
+function basenamePath(p) {
+  if (!p) return '';
+  var i = p.lastIndexOf('/');
+  return i >= 0 ? p.substring(i + 1) : p;
+}
+
+function detectProfile(procName) {
+  if (!procName) return null;
+  if (procName.indexOf(CONFIG.TARGET_APP) !== -1) return 'app';
+  var base = basenamePath(procName);
+  var i;
+  for (i = 0; i < CONFIG.TARGET_DAEMON_NAMES.length; i++) {
+    var dn = CONFIG.TARGET_DAEMON_NAMES[i];
+    if (procName.indexOf(dn) !== -1 || base === basenamePath(dn)) return 'daemon';
+  }
+  if (base === 'vcplax') return 'daemon';
+  return null;
+}
+
+function assertTargetProcess() {
+  STATE.processName = readCmdline();
+  STATE.profile = detectProfile(STATE.processName);
+  logInfo('boot pid=' + Process.id + ' arch=' + Process.arch + ' cmdline="' + STATE.processName + '"');
+  if (!STATE.profile) {
+    logWarn('process not in allowlist — hooks disabled');
+    logWarn('allowed: ' + CONFIG.TARGET_APP + ' | vcplax (/data/vcplax)');
+    logWarn('inject with: frida-inject -p $(pidof vcplax) -s script.js --runtime=qjs');
+    return false;
+  }
+  logOk('profile=' + STATE.profile + ' (native-only, no Java.perform)');
+  return true;
+}
+
+// ─── Safe hook helper (resilience) ───────────────────────────────────────────
+function safeAttach(name, address, callbacks) {
+  if (STATE.hooks[name]) return true;
+  if (!address || address.isNull()) return false;
+  try {
+    Interceptor.attach(address, callbacks);
+    STATE.hooks[name] = true;
+    logOk('hook installed: ' + name + ' @ ' + address);
+    return true;
+  } catch (e) {
+    logErr('hook failed: ' + name + ' @ ' + address + ' — ' + e);
+    return false;
+  }
+}
+
+function findExport(moduleName, symbolName) {
+  try {
+    var addr = Module.findExportByName(moduleName, symbolName);
+    if (addr && !addr.isNull()) return addr;
+  } catch (e1) { /* ignore */ }
+  try {
+    var addr2 = Module.findExportByName(null, symbolName);
+    if (addr2 && !addr2.isNull()) return addr2;
+  } catch (e2) { /* ignore */ }
+  return null;
 }
 
 function findModule(namePart) {
   var found = null;
-  Process.enumerateModules().forEach(function (m) {
-    if (found) return;
-    if (m.name.indexOf(namePart) !== -1 || m.path.indexOf(namePart) !== -1) found = m;
-  });
+  try {
+    Process.enumerateModules().forEach(function (m) {
+      if (found) return;
+      if (m.name.indexOf(namePart) !== -1 || m.path.indexOf(namePart) !== -1) found = m;
+    });
+  } catch (e) {
+    logErr('enumerateModules: ' + e);
+  }
   return found;
 }
 
+function schedule(name, tryInstall, intervalMs) {
+  var attempts = 0;
+  var run = function () {
+    STATE.tick++;
+    if (STATE.hooks[name]) return;
+    if (CONFIG.POLL_MAX_ATTEMPTS > 0 && attempts >= CONFIG.POLL_MAX_ATTEMPTS) {
+      logWarn('giving up: ' + name + ' after ' + attempts + ' attempts');
+      return;
+    }
+    attempts++;
+    try {
+      if (tryInstall()) {
+        logOk('self-heal complete: ' + name + ' (attempt ' + attempts + ')');
+        return;
+      }
+      if (attempts === 1 || attempts % 5 === 0) {
+        logInfo('waiting for: ' + name + ' (attempt ' + attempts + ')');
+      }
+    } catch (e) {
+      logErr('scheduler ' + name + ': ' + e);
+    }
+    setTimeout(run, intervalMs);
+  };
+  run();
+}
+
+// ─── Parcel / Binder helpers ─────────────────────────────────────────────────
 function u32(buf, off) {
-  if (off + 4 > buf.length) return null;
+  if (!buf || off + 4 > buf.length) return null;
   return (buf[off] & 0xff) | ((buf[off + 1] & 0xff) << 8) |
     ((buf[off + 2] & 0xff) << 16) | ((buf[off + 3] & 0xff) << 24);
 }
@@ -123,14 +220,8 @@ function probeParcelLayout(parcelPtr) {
       if (Number(dataSize) === 0 || Number(dataSize) > 65536) continue;
       if (Number(dataPos) > Number(dataSize)) continue;
       dataPtr.readU8();
-      return {
-        layout: lay,
-        dataPtr: dataPtr,
-        dataSize: Number(dataSize),
-        dataPos: Number(dataPos),
-        dataCap: cap ? Number(cap) : 0
-      };
-    } catch (e) { /* next */ }
+      return { dataPtr: dataPtr, dataSize: Number(dataSize), dataPos: Number(dataPos) };
+    } catch (e) { /* try next layout */ }
   }
   return null;
 }
@@ -140,8 +231,7 @@ function readParcelBytes(info, fromPos, maxLen) {
   var start = fromPos !== undefined ? fromPos : info.dataPos;
   var avail = info.dataSize - start;
   if (avail <= 0) return new Uint8Array(0);
-  var len = avail;
-  if (maxLen !== undefined && len > maxLen) len = maxLen;
+  var len = maxLen !== undefined && avail > maxLen ? maxLen : avail;
   try {
     return new Uint8Array(info.dataPtr.add(start).readByteArray(len));
   } catch (e) { return null; }
@@ -152,18 +242,10 @@ function parseReplyInt32Array(parcelPtr) {
   if (!info) return null;
   var raw = readParcelBytes(info, 0, 64);
   if (!raw || raw.length < 8) return null;
-
-  // Layout A: writeNoException(0) + writeInt32(len) + len × int32
-  var off = 0;
-  var exc = u32(raw, off);
-  if (exc !== 0) off = 0;
-  else off = 4;
-
+  var off = (u32(raw, 0) === 0) ? 4 : 0;
   var len = u32(raw, off);
   if (len === null || len <= 0 || len > 32) {
-    // Layout B: flat int32[5] without length prefix (fallback)
-    var flat = [];
-    var j;
+    var flat = [], j;
     for (j = 0; j < 5; j++) {
       var v = u32(raw, off + j * 4);
       if (v === null) break;
@@ -171,9 +253,7 @@ function parseReplyInt32Array(parcelPtr) {
     }
     return flat.length >= 5 ? flat : null;
   }
-
-  var out = [];
-  var k;
+  var out = [], k;
   for (k = 0; k < len; k++) {
     var val = u32(raw, off + 4 + k * 4);
     if (val === null) break;
@@ -182,220 +262,170 @@ function parseReplyInt32Array(parcelPtr) {
   return out.length > 0 ? out : null;
 }
 
-function pollCountersChanged(a, b) {
-  if (!a || !b || a.length !== b.length) return true;
-  var i;
-  for (i = 0; i < a.length; i++) if (a[i] !== b[i]) return true;
-  return false;
+function readCppString(p) {
+  if (p.isNull()) return '<null>';
+  try {
+    var tag = p.readU8();
+    if ((tag & 1) === 0) return p.add(1).readUtf8String();
+    var len = p.add(8).readU64();
+    var data = p.add(16).readPointer();
+    if (data.isNull()) return '<empty>';
+    return data.readUtf8String(Number(len));
+  } catch (e) { return '<err>'; }
 }
 
-function formatPollCounters(arr) {
-  if (!arr) return '<parse_fail>';
-  var labels = ['c0', 'c1', 'c2', 'c3', 'c4'];
-  var parts = [];
-  var i;
-  for (i = 0; i < arr.length; i++) {
-    parts.push((labels[i] || ('c' + i)) + '=' + arr[i] + '(0x' + (arr[i] >>> 0).toString(16) + ')');
+function dumpParcelSide(label, parcelPtr, dumpLen) {
+  var lines = [];
+  if (parcelPtr.isNull()) return [label + ': <null>'];
+  var info = probeParcelLayout(parcelPtr);
+  if (!info) return [label + ': layout probe failed'];
+  lines.push(label + '_meta size=' + info.dataSize + ' pos=' + info.dataPos);
+  var raw = readParcelBytes(info, 0, dumpLen);
+  if (raw) {
+    lines.push(label + '_HEX (first ' + raw.length + ' bytes):');
+    lines.push(hexdump(info.dataPtr, { offset: 0, length: raw.length, header: true, ansi: false }));
   }
-  return parts.join(' ');
+  return lines;
 }
 
-function logPollDelta(counters, prev) {
-  var delta = [];
-  var i;
-  if (prev && counters) {
-    for (i = 0; i < counters.length; i++) {
-      if (i >= prev.length || counters[i] !== prev[i]) {
-        delta.push('c' + i + ':' + prev[i] + '->' + counters[i]);
-      }
-    }
-  }
-  log('[POLL_STATE] seq=' + pollCount + ' counters=[' + formatPollCounters(counters) + ']' +
-      (delta.length ? ' DELTA {' + delta.join(', ') + '}' : ' (first sample)'));
-}
-
+// ─── XOR decode (libvc static blobs) ─────────────────────────────────────────
 function decodeXorString(base, blobOff, length, keyByte) {
-  var out = [];
-  var i, b, seed;
-  seed = 7;
+  var out = [], i, b, seed = 7;
   for (i = 0; i < length; i++) {
     b = seed ^ base.add(blobOff).add(i).readU8();
     seed = (seed + 0x1f) & 0xff;
     out.push((((i + b - 0x11) ^ (keyByte + i)) & 0xff));
   }
-  try {
-    return String.fromCharCode.apply(null, out);
-  } catch (e) {
-    return out.map(function (c) { return ('0' + c.toString(16)).slice(-2); }).join('');
-  }
+  try { return String.fromCharCode.apply(null, out); }
+  catch (e) { return out.join(','); }
 }
 
 function dumpStaticXorTable(libvcBase, hookState) {
   if (!CONFIG.DUMP_XOR_RODATA || !libvcBase) return;
-  var keyBase = hookState;
-  if (keyBase.isNull()) keyBase = libvcBase;
+  var keyBase = hookState && !hookState.isNull() ? hookState : libvcBase;
   CONFIG.XOR_BLOB_OFFSETS.forEach(function (entry) {
-    var keyByte = 0;
-    try { keyByte = keyBase.add(entry.keyOff).readU8(); } catch (e) { keyByte = 0; }
-    var decoded = decodeXorString(libvcBase, entry.off, entry.len, keyByte);
-    log('[XOR_STATIC] ' + entry.name + ' key@+' + entry.keyOff.toString(16) +
-        '(0x' + keyByte.toString(16) + ') => "' + decoded + '"');
+    try {
+      var keyByte = keyBase.add(entry.keyOff).readU8();
+      var decoded = decodeXorString(libvcBase, entry.off, entry.len, keyByte);
+      logInfo('[XOR_STATIC] ' + entry.name + ' => "' + decoded + '"');
+    } catch (e) {
+      logErr('[XOR_STATIC] ' + entry.name + ': ' + e);
+    }
   });
 }
 
+// ─── Daemon hooks (vcplax) ───────────────────────────────────────────────────
 function installLibvcInitHook(mod) {
-  if (libvcInitHooked || !CONFIG.HOOK_LIBVC_INIT || !mod) return;
+  if (STATE.hooks.libvc_init || !mod) return false;
   var initAddr = mod.base.add(CONFIG.LIBVC_INIT_OFFSET);
-  try {
-    Interceptor.attach(initAddr, {
-      onEnter: function (args) {
-        this.ctx = args[0];
-        log('[libvc init] enter ctx=' + this.ctx);
-      },
-      onLeave: function (retval) {
-        log('[libvc init] leave ret=' + retval.toInt32());
-        dumpStaticXorTable(mod.base, this.ctx);
-      }
-    });
-    libvcInitHooked = true;
-    log('[+] libvc init hook @ ' + initAddr);
-  } catch (e) {
-    log('[!] libvc init hook failed: ' + e);
-  }
+  return safeAttach('libvc_init', initAddr, {
+    onEnter: function (args) {
+      this.ctx = args[0];
+      logInfo('libvc init enter ctx=' + this.ctx);
+    },
+    onLeave: function (retval) {
+      logInfo('libvc init leave ret=' + retval.toInt32());
+      dumpStaticXorTable(mod.base, this.ctx);
+    }
+  });
 }
 
 function installShadowhookHooks() {
-  if (shadowhookInstalled) return;
-  var hooked = 0;
-
-  var hookSym = Module.findExportByName(null, 'shadowhook_hook_sym_name');
-  if (hookSym && CONFIG.HOOK_SHADOWHOOK) {
-    Interceptor.attach(hookSym, {
+  var n = 0;
+  var hookSym = findExport(null, 'shadowhook_hook_sym_name');
+  if (hookSym && CONFIG.HOOK_SHADOWHOOK && !STATE.hooks.shadowhook_sym) {
+    if (safeAttach('shadowhook_hook_sym_name', hookSym, {
       onEnter: function (args) {
-        var lib = readCppString(args[0]);
-        var sym = readCppString(args[1]);
-        log('[HOOK_SYM] lib="' + lib + '" sym="' + sym + '" replace=' + args[2]);
+        logInfo('[HOOK_SYM] lib="' + readCppString(args[0]) + '" sym="' +
+                readCppString(args[1]) + '" replace=' + args[2]);
       }
-    });
-    hooked++;
+    })) n++;
   }
-
-  var hookInit = Module.findExportByName(null, 'shadowhook_init');
-  if (hookInit && CONFIG.HOOK_SHADOWHOOK) {
-    Interceptor.attach(hookInit, {
+  var hookInit = findExport(null, 'shadowhook_init');
+  if (hookInit && CONFIG.HOOK_SHADOWHOOK && !STATE.hooks.shadowhook_init) {
+    if (safeAttach('shadowhook_init', hookInit, {
       onEnter: function (args) {
-        log('[shadowhook_init] mode=' + args[0] + ' debug=' + args[1]);
+        logInfo('[shadowhook_init] mode=' + args[0] + ' debug=' + args[1]);
       }
-    });
-    hooked++;
+    })) n++;
   }
-
-  if (hooked > 0) {
-    shadowhookInstalled = true;
-    log('[+] shadowhook hooks active (' + hooked + ')');
-  }
+  return n > 0;
 }
 
-function hookDlopen() {
-  if (!CONFIG.HOOK_DLOPEN) return;
-  ['dlopen', 'android_dlopen_ext'].forEach(function (name) {
-    var addr = Module.findExportByName(null, name);
+function installDlopenHooks() {
+  if (!CONFIG.HOOK_DLOPEN) return true;
+  var names = ['android_dlopen_ext', 'dlopen'];
+  var any = false;
+  names.forEach(function (name) {
+    if (STATE.hooks['dlopen_' + name]) return;
+    var addr = findExport(null, name);
     if (!addr) return;
-    Interceptor.attach(addr, {
+    if (safeAttach('dlopen_' + name, addr, {
       onEnter: function (args) {
         try { this.path = args[0].readCString(); } catch (e) { this.path = '?'; }
       },
       onLeave: function (retval) {
         if (retval.isNull() || !this.path) return;
-        log('[dlopen] ' + this.path + ' => ' + retval);
+        logInfo('[dlopen] ' + this.path);
         if (this.path.indexOf('libvc++.so') !== -1 || this.path.indexOf('shadowhook') !== -1) {
           installShadowhookHooks();
         }
         if (this.path.indexOf('libvc.so') !== -1) {
-          var mod = Process.findModuleByName('libvc.so');
+          var mod = findModule('libvc.so');
           if (mod) installLibvcInitHook(mod);
         }
       }
-    });
-    log('[+] hooked ' + name);
+    })) any = true;
   });
+  return any;
 }
 
-function hookDlsym() {
-  if (!CONFIG.HOOK_DLSYM) return;
-  var addr = Module.findExportByName(null, 'dlsym');
-  if (!addr) return;
-  Interceptor.attach(addr, {
+function installDlsymHook() {
+  if (!CONFIG.HOOK_DLSYM || STATE.hooks.dlsym) return true;
+  var addr = findExport(null, 'dlsym');
+  if (!addr) return false;
+  return safeAttach('dlsym', addr, {
     onEnter: function (args) {
       try { this.sym = args[1].readCString(); } catch (e) { this.sym = '?'; }
     },
     onLeave: function (retval) {
       if (!this.sym || retval.isNull()) return;
       if (this.sym.indexOf('init') !== -1 || this.sym.indexOf('hook') !== -1) {
-        log('[dlsym] sym="' + this.sym + '" => ' + retval);
+        logInfo('[dlsym] ' + this.sym + ' => ' + retval);
       }
     }
   });
-  log('[+] hooked dlsym');
 }
 
-function dumpParcelSide(label, parcelPtr, dumpLen) {
-  var lines = [];
-  if (parcelPtr.isNull()) {
-    lines.push(label + ': <null>');
-    return lines;
-  }
-  lines.push(label + '_ptr=' + parcelPtr);
-  var info = probeParcelLayout(parcelPtr);
-  if (!info) {
-    lines.push(label + ': <layout probe failed>');
-    return lines;
-  }
-  lines.push(label + '_meta size=' + info.dataSize + ' pos=' + info.dataPos);
-  var rawAll = readParcelBytes(info, 0, dumpLen);
-  if (rawAll) {
-    lines.push(label + '_HEX_ALL (first ' + rawAll.length + ' bytes @0):');
-    lines.push(hexdump(info.dataPtr, { offset: 0, length: rawAll.length, header: true, ansi: false }));
-  }
-  return lines;
+function installOnTransactHook() {
+  if (STATE.hooks.onTransact) return true;
+  var mod = findModule('vcplax');
+  if (!mod) return false;
+  var addr = mod.base.add(CONFIG.ONTRANSACT_OFFSET);
+  return safeAttach('onTransact', addr, {
+    onEnter: onTransactEnter,
+    onLeave: onTransactLeave
+  });
 }
 
-function logTxBlock(ctx) {
-  var border = line('=', 72);
-  var mid = line('-', 72);
-  log(border);
-  log('[TX_START] seq=' + ctx.seq + ' code=' + ctx.code + ' (0x' + ctx.code.toString(16) + ') name=' + txName(ctx.code));
-  log('[TX_HINT]  ' + (TX_JAVA_HINT[ctx.code] || ''));
-  log('[TX_META]  flags=0x' + (ctx.flags >>> 0).toString(16));
-  log(mid);
-  var i;
-  for (i = 0; i < ctx.dataLines.length; i++) log(ctx.dataLines[i]);
-  log(mid);
-  log('[TX_END]   seq=' + ctx.seq + ' retval=' + ctx.retval);
-  for (i = 0; i < ctx.replyLines.length; i++) log(ctx.replyLines[i]);
-  log(border);
-  log('');
-}
-
-function onTransactHandler(args) {
+function onTransactEnter(args) {
   var code = args[1].toInt32();
   this._code = code;
   this._reply = args[3];
 
   if (code === 13 && CONFIG.SUPPRESS_POLL_FULL) {
-    pollCount++;
+    STATE.pollCount++;
     this._pollOnly = true;
-    if (pollCount - pollSummaryLast >= CONFIG.POLL_SUMMARY_EVERY) {
-      pollSummaryLast = pollCount;
-      log('[POLL_SUMMARY] TX13 ticks=' + pollCount + ' (~1Hz App.java pollState)');
+    if (STATE.pollCount - STATE.pollSummaryLast >= CONFIG.POLL_SUMMARY_EVERY) {
+      STATE.pollSummaryLast = STATE.pollCount;
+      logInfo('[POLL_SUMMARY] TX13 ticks=' + STATE.pollCount);
     }
     return;
   }
-
   if (code < 0x0b || code > 0x19) return;
 
   this._pollOnly = false;
-  this._seq = ++seq;
+  this._seq = ++STATE.seq;
   this._flags = args[4].toInt32();
   this._dataLines = dumpParcelSide('DATA', args[2], CONFIG.DUMP_LEN);
 }
@@ -403,56 +433,115 @@ function onTransactHandler(args) {
 function onTransactLeave(retval) {
   if (this._code === 13 && this._pollOnly) {
     if (CONFIG.POLL_PARSE_REPLY) {
-      var counters = parseReplyInt32Array(this._reply);
-      if (counters) {
-        if (!CONFIG.POLL_LOG_DELTA_ONLY || pollCountersChanged(counters, lastPollCounters)) {
-          logPollDelta(counters, lastPollCounters);
-          lastPollCounters = counters.slice();
+      try {
+        var counters = parseReplyInt32Array(this._reply);
+        if (counters) {
+          var changed = !STATE.lastPollCounters;
+          if (!changed) {
+            var i;
+            for (i = 0; i < counters.length; i++) {
+              if (STATE.lastPollCounters[i] !== counters[i]) { changed = true; break; }
+            }
+          }
+          if (!CONFIG.POLL_LOG_DELTA_ONLY || changed) {
+            logInfo('[POLL_STATE] #' + STATE.pollCount + ' ' + counters.join(','));
+            STATE.lastPollCounters = counters.slice();
+          }
         }
-      }
+      } catch (e) { logErr('TX13 parse: ' + e); }
     }
     return;
   }
   if (this._seq === undefined) return;
-  logTxBlock({
-    seq: this._seq,
-    code: this._code,
-    flags: this._flags,
-    retval: retval.toInt32(),
-    dataLines: this._dataLines,
-    replyLines: dumpParcelSide('REPLY', this._reply, CONFIG.DUMP_LEN)
-  });
+  var i;
+  logInfo('=== TX seq=' + this._seq + ' code=' + this._code + ' ' +
+          (TX_NAMES[this._code] || '?') + ' retval=' + retval.toInt32() + ' ===');
+  for (i = 0; i < this._dataLines.length; i++) logInfo(this._dataLines[i]);
+  var rlines = dumpParcelSide('REPLY', this._reply, CONFIG.DUMP_LEN);
+  for (i = 0; i < rlines.length; i++) logInfo(rlines[i]);
 }
 
-function installVcplaxOnTransact() {
-  if (onTransactInstalled) return;
-  var mod = findModule('vcplax');
-  if (!mod) return;
-  var addr = mod.base.add(CONFIG.ONTRANSACT_OFFSET);
-  Interceptor.attach(addr, { onEnter: onTransactHandler, onLeave: onTransactLeave });
-  onTransactInstalled = true;
-  log('[+] hook vcplax onTransact @ ' + addr + ' (base ' + mod.base + ')');
-}
+function bootstrapDaemonProfile() {
+  logInfo('stage: daemon profile — scheduling self-healing hooks');
 
-function bootstrapLateAttach() {
-  var libvc = Process.findModuleByName('libvc.so');
-  if (libvc) {
-    installLibvcInitHook(libvc);
+  schedule('dlopen', installDlopenHooks, CONFIG.POLL_MS);
+  schedule('dlsym', installDlsymHook, CONFIG.POLL_MS);
+  schedule('shadowhook', installShadowhookHooks, CONFIG.POLL_MS);
+  schedule('onTransact', installOnTransactHook, CONFIG.POLL_MS);
+
+  schedule('libvc_init', function () {
+    var mod = findModule('libvc.so');
+    if (!mod) return false;
+    if (STATE.hooks.libvc_init) return true;
+    if (installLibvcInitHook(mod)) return true;
     if (CONFIG.DUMP_XOR_RODATA) {
-      log('[!] libvc already loaded — static XOR needs spawn or vcplax restart under Frida');
-      dumpStaticXorTable(libvc.base, libvc.base);
+      logWarn('libvc already loaded — XOR keys may be stale; prefer spawn via frida_spawn_vcplax.sh');
+      dumpStaticXorTable(mod.base, mod.base);
     }
-  }
-  installShadowhookHooks();
-  installVcplaxOnTransact();
+    return STATE.hooks.libvc_init === true;
+  }, CONFIG.POLL_MS);
+
+  logOk('daemon scheduler started (interval=' + CONFIG.POLL_MS + 'ms)');
 }
 
-log('=== vcplax Frida toolkit v3 (Binder + TX13 + XOR symbols) ===');
-log('arch=' + Process.arch + ' pid=' + Process.id);
-log('TX13 delta=' + CONFIG.POLL_LOG_DELTA_ONLY + ' XOR=' + CONFIG.DUMP_XOR_RODATA);
+// ─── App profile (com.potplayer.music) — passive only ───────────────────────
+function readPidFromProcComm(comm) {
+  try {
+    var f = new File('/proc/' + comm, 'r');
+    // not used — scan /proc numerically is heavy; use module hint instead
+    f.close();
+  } catch (e) { /* ignore */ }
+  return null;
+}
 
-hookDlopen();
-hookDlsym();
-bootstrapLateAttach();
+function checkVcplaxRunning() {
+  // Passive: look for vcplax mapping in any process we can't from app — log hint only
+  var mod = findModule('vcplax');
+  if (mod) {
+    logInfo('vcplax binary mapped in THIS process (unusual for app profile)');
+    return true;
+  }
+  return false;
+}
 
-log('=== ready ===');
+function bootstrapAppProfile() {
+  logInfo('stage: app profile — passive monitoring (no Java.perform, no patchCode)');
+  logInfo('Binder/libvc hooks live in vcplax daemon — attach there for full capture:');
+  logInfo('  PID=$(pidof vcplax); frida-inject -p $PID -s script.js --runtime=qjs');
+
+  schedule('app_dlopen', installDlopenHooks, CONFIG.POLL_MS);
+
+  var vcplaxHintTick = 0;
+  schedule('vcplax_hint', function () {
+    vcplaxHintTick++;
+    if (vcplaxHintTick % 10 === 1) {
+      logInfo('app heartbeat #' + vcplaxHintTick +
+              ' — open app UI, then attach frida to vcplax for HOOK_SYM/Binder');
+    }
+    checkVcplaxRunning();
+    return false; // never mark complete — keep hinting
+  }, CONFIG.POLL_MS);
+
+  logOk('app scheduler started');
+}
+
+// ─── Entry ───────────────────────────────────────────────────────────────────
+function main() {
+  logInfo('=== frida_hook_libvc v4 smart (native / qjs) ===');
+  logInfo('anti-debug: Interceptor.attach only — no Java, no Interceptor.replace, no patchCode');
+
+  if (!assertTargetProcess()) {
+    logWarn('idle mode — wrong process, exiting hook setup');
+    return;
+  }
+
+  if (STATE.profile === 'daemon') {
+    bootstrapDaemonProfile();
+  } else if (STATE.profile === 'app') {
+    bootstrapAppProfile();
+  }
+
+  logOk('ready — profile=' + STATE.profile + ' pid=' + Process.id);
+}
+
+main();
