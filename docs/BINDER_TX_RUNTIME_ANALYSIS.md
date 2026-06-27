@@ -1,6 +1,38 @@
 # Runtime Binder TX analysis — live capture (Frida)
 
-Source log: `libvc_hooks_82f0.log` (318 events, Poco X3 Pro / Android 13)
+Sources:
+- `libvc_hooks_82f0.log` (318 events, attach)
+- `re_tool_capture_3bff.log` (54 TX, attach)
+- **`re_tool_capture_cf7e.log`** (96 TX, RE Tool v1.1 auto START + watchdog) ← **best**
+
+## cf7e session summary (2026-06-27)
+
+| Metric | Value |
+|---|---|
+| Capture mode | `CAPTURE_AUTO_SESSION_START` + watchdog inject pid=24128 |
+| Target | `com.potplayer.music` |
+| UI transactions | **96** (TX13 poll suppressed to summaries) |
+| onTransact | base `0x6410241000`, offset `0x43f8b4` ✓ |
+| Crash | none |
+| HOOK_SYM | none (libvc pre-loaded) |
+
+### cf7e TX frequency (UI only)
+
+| Code | Name | Count |
+|---:|---|---:|
+| 24 | TRANSFORM | 47 |
+| 22 | SEEK_RANGE | 18 |
+| 17 | SET_LOOP | 7 |
+| 15 | GET_STATUS | 4 |
+| 16 | SET_AUTO_ROTATE | 4 |
+| 18 | SET_ANGLE | 5 |
+| 14 | SET_MODE | 3 |
+| 11 | PLAY_SOURCE | 2 |
+| 12 | STOP_OR_QUERY | 2 |
+| 19 | SET_MIRROR | 2 |
+| 25 | HARD_RECOVERY | 2 |
+
+## TX frequency (forensic — first log)
 
 ## TX frequency (forensic)
 
@@ -46,7 +78,7 @@ Every other TX is followed by 1–N poll ticks → creates illusion that "13 = b
 | **18** | Rotation angle (0, 0x5a, 0xb4, 0x10e) | Triple burst = user cycling angles |
 | **19** | Mirror flag | Single bool |
 | **22** | Seek range µs (two int64) | Burst 2–4 = scrubbing timeline |
-| **24** | Transform: mode + 4 float + color int | Double fire = apply + confirm |
+| **24** | Transform: mode/ARGB + 4×float + colorMode | cf7e: mode=0 geometry; **mode=ARGB int during color picker** |
 | **25** | Hard recovery XOR toggle | Always paired 2× |
 
 ## Typical sequences from log

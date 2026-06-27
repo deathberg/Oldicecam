@@ -1,7 +1,7 @@
 # Clone roadmap — closing the last ~10% and building without original libvc
 
 Date: 2026-06-27  
-Status: Binder protocol **~98%** decoded; this document covers runtime gaps + clone architecture.
+Status: Binder protocol **~99.5%** decoded; RE Tool v1.1 auto-capture **validated** (`re_tool_capture_cf7e.log`).
 
 ---
 
@@ -9,9 +9,10 @@ Status: Binder protocol **~98%** decoded; this document covers runtime gaps + cl
 
 | Gap | Tool / artifact | Done? |
 |---|---|:---:|
-| XOR symbol names in libvc | `frida_hook_libvc.js` + `frida_spawn_vcplax.sh` | Script ready |
-| TX13 int[5] semantics | TX13 delta logger in sniffer | Script ready |
-| TX11/TX14 native pipeline | Ghidra + this doc §3 | ~85% |
+| XOR symbol names in libvc | static Ghidra XOR decode OR true spawn | **Still open** |
+| TX13 int[5] semantics | TX13 delta logger | **✅ c0=active, c1/c2=WxH** |
+| Runtime capture (no Termux) | RE Tool v1.1 START | **✅ validated** |
+| TX11/TX14 native pipeline | Ghidra + cf7e live | ~88% |
 | Runnable Binder stub | `clone/native/libvc_clone.cpp` | Skeleton |
 
 ---
