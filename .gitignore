@@ -11,6 +11,23 @@ captures/
 # Reverse-engineering tooling (download locally; see decompiled/INDEX.md)
 tools/*
 !tools/*.py
+!tools/*.sh
+!tools/*.txt
+!tools/ghidra/
+!tools/r2/
+tools/ghidra/*.log
+tools/r2/*.txt
+tools/jadx.zip
+tools/ghidra.zip
+tools/r2.tar.xz
+tools/rizin.tar.xz
+tools/r2.tar.xz
 decompiled/jadx/
 decompiled/apktool/
 decompiled/raw/
+
+# Local RE workspace artifacts (large)
+re-workspace/ghidra/
+re-workspace/r2/
+re-workspace/exports/
+re-workspace/logs/
