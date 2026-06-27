@@ -9,7 +9,8 @@ local.properties
 captures/
 
 # Reverse-engineering tooling (download locally; see decompiled/INDEX.md)
-tools/
+tools/*
+!tools/*.py
 decompiled/jadx/
 decompiled/apktool/
 decompiled/raw/
