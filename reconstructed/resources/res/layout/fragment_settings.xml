@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:theme="@style/Theme.Vcamera2" android:layout_width="fill_parent" android:layout_height="fill_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <ScrollView android:layout_width="fill_parent" android:layout_height="fill_parent">
+        <LinearLayout android:orientation="vertical" android:id="@id/rootLinearLayout" android:layout_width="fill_parent" android:layout_height="wrap_content" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent">
+            <LinearLayout android:orientation="vertical" android:background="@drawable/rounded_bg" android:padding="12.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_margin="12.0dip" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent">
+                <TableLayout android:layout_width="fill_parent" android:layout_height="wrap_content">
+                    <TextView android:textSize="16.0dip" android:textColor="@color/blue2" android:gravity="center" android:padding="8.0dip" android:text="动作设置(1秒=1000000微秒)" />
+                    <TableRow>
+                        <TextView android:textColor="#ff000000" android:gravity="center" android:padding="8.0dip" android:text="眨眼" />
+                        <EditText android:id="@id/actionRangebgin1" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="0" android:hint="开始时间(微妙)" android:digits=" 0123456789" android:inputType="number" android:imeOptions="actionDone" />
+                        <EditText android:id="@id/actionRangeend1" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="1170000" android:hint="结束时间(微妙)" android:digits=" 0123456789" android:inputType="number" android:imeOptions="actionDone" />
+                    </TableRow>
+                    <TableRow>
+                        <TextView android:textColor="#ff000000" android:gravity="center" android:padding="8.0dip" android:text="抬头" />
+                        <EditText android:id="@id/actionRangebgin2" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="5000000" android:hint="开始时间(微妙)" android:digits=" 0123456789" android:inputType="number" android:imeOptions="actionDone" />
+                        <EditText android:id="@id/actionRangeend2" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="5900000" android:hint="结束时间(微妙)" android:digits=" 0123456789" android:inputType="number" android:imeOptions="actionDone" />
+                    </TableRow>
+                    <TableRow>
+                        <TextView android:textColor="#ff000000" android:gravity="center" android:padding="8.0dip" android:text="张嘴" />
+                        <EditText android:id="@id/actionRangebgin3" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="2000000" android:hint="开始时间(微妙)" android:digits=" 0123456789" android:inputType="number" android:imeOptions="actionDone" />
+                        <EditText android:id="@id/actionRangeend3" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="3200000" android:hint="结束时间(微妙)" android:digits=" 0123456789" android:inputType="number" android:imeOptions="actionDone" />
+                    </TableRow>
+                    <TableRow>
+                        <TextView android:textColor="#ff000000" android:gravity="center" android:padding="8.0dip" android:text="左转头" />
+                        <EditText android:id="@id/actionRangebgin4" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="3200000" android:hint="开始时间(微妙)" android:digits=" 0123456789" android:inputType="number" android:imeOptions="actionDone" />
+                        <EditText android:id="@id/actionRangeend4" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="4000000" android:hint="结束时间(微妙)" android:digits=" 0123456789" android:inputType="number" android:imeOptions="actionDone" />
+                    </TableRow>
+                    <TableRow>
+                        <TextView android:textColor="#ff000000" android:gravity="center" android:padding="8.0dip" android:text="回正" />
+                        <EditText android:id="@id/actionRangebgin5" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="4000000" android:hint="开始时间(微妙)" android:digits=" 0123456789" android:inputType="number" android:imeOptions="actionDone" />
+                        <EditText android:id="@id/actionRangeend5" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="4000000" android:hint="结束时间(微妙)" android:digits=" 0123456789" android:inputType="number" android:imeOptions="actionDone" />
+                    </TableRow>
+                    <TableRow>
+                        <TextView android:textColor="#ff000000" android:gravity="center" android:padding="8.0dip" android:text="右转头" />
+                        <EditText android:id="@id/actionRangebgin6" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="4000000" android:hint="开始时间(微妙)" android:digits=" 0123456789" android:inputType="number" android:imeOptions="actionDone" />
+                        <EditText android:id="@id/actionRangeend6" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="5000000" android:hint="结束时间(微妙)" android:digits=" 0123456789" android:inputType="number" android:imeOptions="actionDone" />
+                    </TableRow>
+                    <TableRow>
+                        <TextView android:textColor="#ff000000" android:gravity="center" android:padding="8.0dip" android:text="点头" />
+                        <EditText android:id="@id/actionRangebgin8" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="5600000" android:hint="开始时间(微妙)" android:digits=" 0123456789" android:inputType="number" android:imeOptions="actionDone" />
+                        <EditText android:id="@id/actionRangeend8" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="6800000" android:hint="结束时间(微妙)" android:digits=" 0123456789" android:inputType="number" android:imeOptions="actionDone" />
+                    </TableRow>
+                </TableLayout>
+                <Button android:id="@id/savePlayTime" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="保存" />
+            </LinearLayout>
+            <LinearLayout android:orientation="vertical" android:background="@drawable/rounded_bg" android:padding="12.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_margin="12.0dip" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent">
+                <TextView android:textSize="16.0dip" android:textColor="@color/blue2" android:gravity="center" android:padding="8.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="三色设置" />
+                <RadioGroup android:orientation="horizontal" android:id="@id/radioGroup_color_type" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                    <RadioButton android:enabled="false" android:id="@id/colorctype_1" android:layout_width="100.0dip" android:layout_height="wrap_content" android:text="帧内提取" />
+                    <RadioButton android:enabled="false" android:id="@id/colorctype_2" android:layout_width="100.0dip" android:layout_height="wrap_content" android:text="视频替换" />
+                    <RadioButton android:id="@id/colorctype_3" android:layout_width="100.0dip" android:layout_height="wrap_content" android:checked="true" android:text="实时渲染" />
+                </RadioGroup>
+                <TextView android:textSize="12.0dip" android:textColor="@color/blue2" android:id="@id/tips1" android:padding="8.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="当前模式会自动根据屏幕颜色给视频注入颜色" />
+            </LinearLayout>
+            <TextView android:textSize="12.0dip" android:textColor="@color/blue2" android:id="@id/textxy" android:padding="8.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="当前选择监测屏幕坐标:x,y" />
+            <Button android:id="@id/selectxy" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="选择检测屏幕坐标" />
+        </LinearLayout>
+    </ScrollView>
+    <FrameLayout android:id="@id/rootLayout" android:background="#ffffffff" android:visibility="gone" android:layout_width="fill_parent" android:layout_height="fill_parent" />
+</androidx.constraintlayout.widget.ConstraintLayout>

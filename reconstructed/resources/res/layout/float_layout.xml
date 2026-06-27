@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center_vertical" android:layout_gravity="center" android:orientation="horizontal" android:padding="6.0dip" android:layout_width="wrap_content" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <ImageView android:id="@id/main_button" android:background="@android:color/transparent" android:layout_width="56.0dip" android:layout_height="56.0dip" android:scaleType="centerInside" />
+    <GridLayout android:id="@id/button_group" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:rowCount="4" android:columnCount="4" android:columnOrderPreserved="false" android:useDefaultMargins="false" android:alignmentMode="alignMargins">
+        <Button android:id="@id/butonf1" android:layout_width="50.0dip" android:layout_height="50.0dip" android:text="眼" />
+        <Button android:id="@id/butonf2" android:layout_width="50.0dip" android:layout_height="50.0dip" android:text="↑" />
+        <Button android:id="@id/butonf3" android:layout_width="50.0dip" android:layout_height="50.0dip" android:text="嘴" />
+        <Button android:id="@id/butonf31" android:layout_width="50.0dip" android:layout_height="50.0dip" android:text="1" />
+        <Button android:id="@id/butonf4" android:layout_width="50.0dip" android:layout_height="50.0dip" android:text="←" />
+        <Button android:id="@id/butonf5" android:layout_width="50.0dip" android:layout_height="50.0dip" android:text="正" />
+        <Button android:id="@id/butonf6" android:layout_width="50.0dip" android:layout_height="50.0dip" android:text="→" />
+        <Button android:id="@id/butonf32" android:layout_width="50.0dip" android:layout_height="50.0dip" android:text="2" />
+        <Button android:id="@id/butonf7" android:layout_width="50.0dip" android:layout_height="50.0dip" android:text="播" />
+        <Button android:id="@id/butonf8" android:layout_width="50.0dip" android:layout_height="50.0dip" android:text="↓" />
+        <Button android:id="@id/butonf9" android:layout_width="50.0dip" android:layout_height="50.0dip" android:text="循" />
+        <Button android:id="@id/butonf33" android:layout_width="50.0dip" android:layout_height="50.0dip" android:text="3" />
+        <Button android:id="@id/butonf10" android:layout_width="50.0dip" android:layout_height="50.0dip" android:text="转" />
+        <Button android:id="@id/butonf11" android:layout_width="50.0dip" android:layout_height="50.0dip" android:text="翻" />
+        <Button android:id="@id/butonf12" android:layout_width="50.0dip" android:layout_height="50.0dip" android:text="关" />
+        <Button android:id="@id/butonf34" android:layout_width="50.0dip" android:layout_height="50.0dip" android:text="替" />
+    </GridLayout>
+</LinearLayout>
