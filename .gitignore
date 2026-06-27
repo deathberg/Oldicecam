@@ -30,5 +30,9 @@ decompiled/raw/
 # Local RE workspace artifacts (large)
 re-workspace/ghidra/
 re-workspace/r2/
-re-workspace/exports/
-re-workspace/logs/
+re-workspace/exports/*
+!re-workspace/exports/.gitkeep
+re-workspace/logs/*
+!re-workspace/logs/.gitkeep
+re-workspace/runtime-pull/*
+!re-workspace/runtime-pull/.gitkeep

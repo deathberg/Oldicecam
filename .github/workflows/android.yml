@@ -1,11 +1,11 @@
-name: Android APK build
+name: RE Tool & clone CI
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, 'cursor/re-testicecam2-e3a1' ]
   pull_request:
   workflow_dispatch:
 jobs:
-  build:
+  build-retool:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -18,10 +18,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.11.1
-      - name: Build debug APK
-        run: gradle --no-daemon --stacktrace assembleDebug
-      - name: Upload APK artifact
+      - name: Build RE Tool debug APK
+        run: gradle --no-daemon --stacktrace :retool:assembleDebug
+      - name: Upload RE Tool APK
         uses: actions/upload-artifact@v4
         with:
-          name: IceCam-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: RE-Tool-debug-apk
+          path: retool/build/outputs/apk/debug/*.apk

@@ -2,7 +2,9 @@
  * libvc_clone — Binder service skeleton replacing vcplax BBinder side.
  *
  * Implements com.xiaomi.vlive.IMyBinderService transaction codes 11–25 (UI subset).
- * Does NOT implement libvc GraphicBuffer hooks — that is a separate injection layer.
+ * Camera injection is a separate libvc_replacement.so (ShadowHook on libcameraservice.so).
+ *
+ * See docs/RE_FINAL_REPORT.md for verified MediaContext offsets and inject architecture.
  *
  * Build (NDK r26+, arm64-v8a):
  *   cmake -B build -DANDROID_ABI=arm64-v8a -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake
@@ -18,30 +20,34 @@
 
 namespace vlive::clone {
 
-/** Mirrors vcplax media context fields recovered from Ghidra (partial). */
+/** vcplax MediaContext — offsets verified Ghidra + runtime (2026-06-27). */
 struct MediaContext {
-    int mode = 1;              // 1=local file, 2=RTMP URL
-    std::string sourcePath;    // path or rtmp:// URL
-    bool loop = false;
-    bool autoRotate = false;
-    bool mirror = false;
-    int angleDegrees = 0;
-    int64_t seekBeginUs = 0;
-    int64_t seekEndUs = 0;
+    int mode = 1;              // +0x18: 1=local file, 2=RTMP URL
+    std::string sourcePath;    // +0x20: path or rtmp:// URL
+    bool pipelineArmed = false; // +0x28: set before decode thread spawn
+    void* libvcReady = nullptr; // +0x30
+    void* decodeThread = nullptr; // +0x48
+    int64_t seekBeginMs = 0;   // +0x58 (TX22 uses milliseconds, not µs)
+    int64_t seekEndMs = 0;     // +0x60
+    bool loop = false;         // +0x98
+    bool autoRotate = false;   // +0xa8
+    int angleDegrees = 0;      // +0xac: 0, 0x5a, 0xb4, 0x10e, 0x168
+    bool mirror = false;       // +0xb0
+    bool seekPending = false;  // +0x10c
 
     struct TransformState {
-        int mode = 0;
-        float x = 0.f;
-        float y = 0.f;
-        float intensity = 0.f;
-        float diameter = 0.f;
-        int colorMode = 2;
+        int mode = 0;          // +0x160
+        float x = 0.f;         // +0x164
+        float y = 0.f;         // +0x168
+        float diameter = 0.f;  // +0x16c
+        float intensity = 0.f; // +0x170
+        int colorMode = 2;     // +0x174
     } transform;
 
-    bool hardRecovery = false;
+    bool hardRecovery = false; // service BBinder+0x44 toggle (TX25)
 
-    // TX13 counters — labels TBD after Frida [POLL_STATE] capture
-    int32_t pollCounters[5] = {0, 0, 0, 0, 0};
+    // TX13 poll counters (globals DAT_00c79bf8.. in original)
+    int32_t pollCounters[5] = {0, 0, 0, 0, 0}; // c0=active, c1/c2=WxH flash
 };
 
 enum TxCode : uint32_t {
@@ -84,11 +90,11 @@ public:
 
     void stop();
     int getStatus() const;
-    void seekRange(int64_t beginUs, int64_t endUs);
+    void seekRange(int64_t beginMs, int64_t endMs);
     void setTransform(const MediaContext::TransformState& t);
 
-    /** Called from decode thread — updates TX13 counters. */
-    void onFrameDecoded();
+    /** Called from decode thread — updates TX13 counters + libvc inject queue. */
+    void onFrameDecoded(int width, int height);
     void onNetworkStats(int32_t bytesPerSec);
 
 private:
