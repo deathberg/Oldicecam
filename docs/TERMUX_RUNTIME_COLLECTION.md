@@ -110,7 +110,20 @@ cp /data/local/tmp/libvc_hooks.log /sdcard/Download/ 2>/dev/null
 
 ```
 HOOK_SYM lib=libui.so sym=_ZN7android13GraphicBuffer... replace=0x...
-BINDER_TX code=11 (0xb)
+[POLL_STATE] seq=42 counters=[c0=...] DELTA {c1:...->...}
+```
+
+### Spawn vcplax (для HOOK_SYM / XOR — libvc ещё не загружена)
+
+Attach к уже запущенному `vcplax` **не ловит** `shadowhook_hook_sym_name`. Нужен spawn:
+
+```bash
+curl -LO https://raw.githubusercontent.com/deathberg/Oldicecam/cursor/apk-full-reverse-e3a1/tools/termux/frida_hook_libvc.js
+curl -LO https://raw.githubusercontent.com/deathberg/Oldicecam/cursor/apk-full-reverse-e3a1/tools/termux/frida_spawn_vcplax.sh
+chmod +x frida_spawn_vcplax.sh
+cp frida_hook_libvc.js frida_spawn_vcplax.sh /data/local/tmp/
+tsu -c 'setenforce 0; /data/local/tmp/frida_spawn_vcplax.sh'
+grep -E 'HOOK_SYM|XOR_STATIC|POLL_STATE' /data/local/tmp/libvc_symbols.log
 ```
 
 ### Частые ошибки
