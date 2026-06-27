@@ -19,7 +19,7 @@ public class DecompileAt extends GhidraScript {
             println("Usage: DecompileAt.java <address> <label> [outputBasename]");
             return;
         }
-        Address addr = toAddr(args[0]);
+        Address addr = resolveQueryAddress(args[0]);
         if (addr == null) {
             println("Invalid address: " + args[0]);
             return;
@@ -27,7 +27,10 @@ public class DecompileAt extends GhidraScript {
         FunctionManager fm = currentProgram.getFunctionManager();
         Function fn = fm.getFunctionContaining(addr);
         if (fn == null) {
-            println("No function at " + addr);
+            fn = fm.getFunctionAt(addr);
+        }
+        if (fn == null) {
+            println("No function at " + addr + " (imageBase=" + currentProgram.getImageBase() + ")");
             return;
         }
         DecompInterface decomp = new DecompInterface();
@@ -50,5 +53,33 @@ public class DecompileAt extends GhidraScript {
             w.write(body);
         }
         println("Wrote " + out.getAbsolutePath());
+    }
+
+    /** Map file/ELF VAs (r2/objdump) to Ghidra addresses when image base != 0. */
+    private Address resolveQueryAddress(String raw) throws Exception {
+        String s = raw.trim();
+        if (!s.startsWith("0x") && !s.startsWith("0X")) {
+            s = "0x" + s;
+        }
+        long fileVa = Long.decode(s);
+        Address direct = toAddr(s);
+        FunctionManager fm = currentProgram.getFunctionManager();
+        Function fn = fm.getFunctionContaining(direct);
+        if (fn == null) {
+            fn = fm.getFunctionAt(direct);
+        }
+        if (fn != null) {
+            return direct;
+        }
+        Address shifted = currentProgram.getImageBase().add(fileVa);
+        fn = fm.getFunctionContaining(shifted);
+        if (fn == null) {
+            fn = fm.getFunctionAt(shifted);
+        }
+        if (fn != null) {
+            println("Resolved " + raw + " -> " + shifted + " via imageBase " + currentProgram.getImageBase());
+            return shifted;
+        }
+        return direct;
     }
 }

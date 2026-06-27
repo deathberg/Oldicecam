@@ -195,7 +195,7 @@ Each ABI is a **separate compile**, not a thin wrapper.
 
 ## 8. What still requires Ghidra/IDA (next step)
 
-1. **Decompile `vcplax` onTransact** at TX24 cluster (`0x444024+`) → exact float/int semantics for transform/color.
+1. **Decompile `vcplax` onTransact** at **`0x43f8b4`** — **DONE** → `docs/NATIVE_FINAL_DECOMPILE.md`
 2. **Trace `libvc` init** → find `shadowhook_hook_sym_name` call sites and recovered symbol strings on stack.
 3. **Recover `main()` / argv parsing** in vcplax → confirm service name = `argv[1]`.
 4. **Map FFmpeg custom IO** → how injected frames reach camera HAL.

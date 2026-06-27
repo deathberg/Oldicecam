@@ -35,9 +35,19 @@ re-workspace/
 | aarch64 objdump | `aarch64-linux-gnu-objdump` |
 | armhf objdump | `arm-linux-gnueabihf-objdump` |
 
-## Ghidra — что уже размечено
+## Ghidra — статус (arm64 vcplax)
 
-Post-script `tools/ghidra/BookmarkIcecam.java` ставит bookmarks на arm64 `vcplax.so`:
+**Импорт: УСПЕХ** (`re-workspace/logs/ghidra_vcplax_arm64.console`, анализ 249s, 30941 функций).
+
+| Параметр | Значение |
+|---|---|
+| Image base | `0x100000` — file VA + 0x100000 = Ghidra VA |
+| onTransact | **`0x43f8b4`** (не 0x43f8fc — это mid-function) |
+| Экспорт C | `bash tools/ghidra/export_batch.sh` → `re-workspace/exports/` |
+
+Финальный отчёт с псевдокодом: **`docs/NATIVE_FINAL_DECOMPILE.md`**
+
+## Ghidra — bookmarks (устаревшие адреса TX — см. финальный отчёт)
 
 | Bookmark | Address | Meaning |
 |---|---|---|
