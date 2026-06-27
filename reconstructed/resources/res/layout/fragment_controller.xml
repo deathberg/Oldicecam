@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:theme="@style/Theme.Vcamera2" android:layout_width="fill_parent" android:layout_height="fill_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <ScrollView android:layout_width="fill_parent" android:layout_height="fill_parent">
+        <LinearLayout android:orientation="vertical" android:layout_width="fill_parent" android:layout_height="wrap_content" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent">
+            <LinearLayout android:orientation="vertical" android:background="@drawable/rounded_bg" android:padding="12.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_margin="12.0dip" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent">
+                <TextView android:textSize="16.0dip" android:id="@id/expiration_time" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="欢迎使用新相机兼容模式(1926内核)" />
+            </LinearLayout>
+            <LinearLayout android:orientation="vertical" android:id="@id/controls1" android:background="@drawable/rounded_bg" android:padding="12.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_margin="12.0dip" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent">
+                <RadioGroup android:orientation="horizontal" android:id="@id/radioGroup_file_type" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                    <RadioButton android:id="@id/file_type_mp4" android:layout_width="100.0dip" android:layout_height="wrap_content" android:text="视频替换" />
+                    <RadioButton android:id="@id/file_type_rtmp" android:layout_width="100.0dip" android:layout_height="wrap_content" android:layout_marginLeft="20.0dip" android:text="推流替换" />
+                </RadioGroup>
+                <TextView android:id="@id/filetypetxt" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="rtmp链接:" />
+                <EditText android:id="@id/playfile" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="" android:inputType="text" android:imeOptions="actionDone" />
+                <com.kusu.loadingbutton.LoadingButton android:textColor="@color/blue1" android:id="@id/selectsave" android:layout_width="fill_parent" android:layout_height="42.0dip" android:layout_marginBottom="20.0dip" android:text="选择视频" app:lb_buttonColor="@color/blue2" app:lb_isCircular="true" app:lb_isShadowEnable="false" app:lb_loaderColor="@color/blue1" />
+                <com.kusu.loadingbutton.LoadingButton android:textColor="@color/blue1" android:id="@id/start_hook" android:layout_width="fill_parent" android:layout_height="42.0dip" android:layout_marginBottom="20.0dip" android:text="替换相机" app:lb_buttonColor="@color/blue2" app:lb_isCircular="true" app:lb_isShadowEnable="false" app:lb_loaderColor="@color/blue1" app:lb_loaderMargin="8.0dip" />
+            </LinearLayout>
+            <LinearLayout android:orientation="vertical" android:id="@id/controls" android:background="@drawable/rounded_bg" android:padding="12.0dip" android:visibility="gone" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_margin="12.0dip" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent">
+                <Button android:id="@id/camera_preview" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginBottom="20.0dip" android:text="前置预览" />
+                <Switch android:id="@id/switchfloatingwindow" android:layout_width="fill_parent" android:layout_height="wrap_content" android:minHeight="48.0dip" android:thumb="@drawable/switch_thumb_ios_style" android:text="悬浮窗口" android:track="@drawable/switch_track_ios_style" android:paddingHorizontal="6.0dip" />
+                <Switch android:id="@id/auto_rotate" android:layout_width="fill_parent" android:layout_height="wrap_content" android:checked="false" android:minHeight="48.0dip" android:thumb="@drawable/switch_thumb_ios_style" android:text="画面纠正" android:track="@drawable/switch_track_ios_style" android:paddingHorizontal="6.0dip" />
+                <Switch android:id="@id/play_loop" android:layout_width="fill_parent" android:layout_height="wrap_content" android:minHeight="48.0dip" android:thumb="@drawable/switch_thumb_ios_style" android:text="循环播放" android:track="@drawable/switch_track_ios_style" android:paddingHorizontal="6.0dip" />
+                <Switch android:id="@id/auto_color" android:layout_width="fill_parent" android:layout_height="wrap_content" android:minHeight="48.0dip" android:thumb="@drawable/switch_thumb_ios_style" android:text="三色注入" android:track="@drawable/switch_track_ios_style" android:paddingHorizontal="6.0dip" />
+            </LinearLayout>
+            <TextView android:id="@id/logmsg" android:padding="12.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_margin="12.0dip" android:text="" />
+        </LinearLayout>
+    </ScrollView>
+    <FrameLayout android:id="@id/preview_overlay" android:background="#88000000" android:visibility="gone" android:clickable="true" android:layout_width="fill_parent" android:layout_height="fill_parent">
+        <LinearLayout android:layout_gravity="center" android:orientation="vertical" android:background="@android:color/white" android:clickable="true" android:layout_width="wrap_content" android:layout_height="wrap_content">
+            <TextureView android:id="@id/cameraTextureView" android:layout_width="320.0dip" android:layout_height="480.0dip" />
+            <Button android:id="@id/test_color" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginBottom="20.0dip" android:text="三色测试" />
+            <GridLayout android:layout_width="fill_parent" android:layout_height="fill_parent" android:rowCount="5" android:columnCount="2" android:columnOrderPreserved="false" android:useDefaultMargins="false" android:alignmentMode="alignMargins">
+                <TextView android:textSize="12.0dip" android:id="@id/valueTextmode" android:layout_width="100.0dip" android:layout_height="wrap_content" android:text="模式选择" android:paddingVertical="16.0dip" />
+                <RadioGroup android:orientation="horizontal" android:id="@id/ssmode" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                    <RadioButton android:id="@id/ssmode1" android:layout_width="100.0dip" android:layout_height="wrap_content" android:text="模式1" />
+                    <RadioButton android:id="@id/ssmode2" android:layout_width="100.0dip" android:layout_height="wrap_content" android:text="模式2" />
+                </RadioGroup>
+                <TextView android:textSize="12.0dip" android:id="@id/valueText" android:layout_width="100.0dip" android:layout_height="wrap_content" android:text="照射强度:20%" android:paddingVertical="4.0dip" />
+                <SeekBar android:id="@id/seekBar" android:layout_width="200.0dip" android:layout_height="wrap_content" android:max="100" android:progress="20" android:min="1" android:paddingVertical="4.0dip" />
+                <TextView android:textSize="12.0dip" android:id="@id/valueText2" android:layout_width="100.0dip" android:layout_height="wrap_content" android:text="照射直径:25%" android:paddingVertical="4.0dip" />
+                <SeekBar android:id="@id/seekBar2" android:layout_width="200.0dip" android:layout_height="wrap_content" android:max="100" android:progress="25" android:min="1" android:paddingVertical="4.0dip" />
+                <TextView android:textSize="12.0dip" android:id="@id/valueText3" android:layout_width="100.0dip" android:layout_height="wrap_content" android:text="X坐标:50%" android:paddingVertical="4.0dip" />
+                <SeekBar android:id="@id/seekBar3" android:layout_width="200.0dip" android:layout_height="wrap_content" android:max="100" android:progress="50" android:min="0" android:paddingVertical="4.0dip" />
+                <TextView android:textSize="12.0dip" android:id="@id/valueText4" android:layout_width="100.0dip" android:layout_height="wrap_content" android:text="Y坐标:50%" android:paddingVertical="4.0dip" />
+                <SeekBar android:id="@id/seekBar4" android:layout_width="200.0dip" android:layout_height="wrap_content" android:max="100" android:progress="50" android:min="0" android:paddingVertical="4.0dip" />
+            </GridLayout>
+        </LinearLayout>
+    </FrameLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

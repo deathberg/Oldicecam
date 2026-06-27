@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  App-specific strings recovered from testicecam2.apk (com.potplayer.music).
+  Framework/library strings (abc_*, mtrl_*, material_*) are omitted.
+  Note: the launcher label is set in AndroidManifest (android:label="新相机(1926内核)"),
+  while app_name in resources is "离线版本" (offline build).
+-->
+<resources>
+    <string name="app_name">离线版本</string>            <!-- "Offline version" -->
+    <string name="title_home">首页</string>             <!-- "Home" -->
+    <string name="title_controller">控制</string>        <!-- "Controller" -->
+    <string name="title_settings">设置</string>          <!-- "Settings" -->
+</resources>
