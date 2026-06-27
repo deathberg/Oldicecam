@@ -1,11 +1,10 @@
-package dev.icecam.app.recapture;
+package dev.icecam.retool;
 
 import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -13,17 +12,12 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import dev.icecam.app.AppLogger;
-import dev.icecam.app.BuildInfo;
-import dev.icecam.app.UiKit;
-
 /**
- * One-tap RE log capture — replaces Termux + frida-inject workflow.
- * Log: /sdcard/Download/icecam_re_capture.log
+ * Standalone root companion for testicecam2.apk — deploy Frida, inject vcplax, pull artifacts.
  */
-public final class ReCaptureActivity extends Activity {
+public final class MainActivity extends Activity {
     private AppLogger logger;
-    private FridaReCapture capture;
+    private ReToolEngine engine;
     private TextView logView;
     private TextView statusView;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -33,7 +27,7 @@ public final class ReCaptureActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         logger = new AppLogger(this);
-        capture = new FridaReCapture(this, logger);
+        engine = new ReToolEngine(this, logger);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -41,47 +35,57 @@ public final class ReCaptureActivity extends Activity {
         root.setPadding(dp(12), dp(12), dp(12), dp(12));
 
         TextView title = new TextView(this);
-        title.setText("IceCam RE Capture");
+        title.setText("RE Tool");
         title.setTextColor(UiKit.TEXT);
-        title.setTextSize(18f);
+        title.setTextSize(20f);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         root.addView(title);
 
         TextView hint = new TextView(this);
-        hint.setText("Root + vcplax Frida log for reverse engineering.\n" +
-                "Log: " + FridaReCapture.LOG_PUBLIC);
+        hint.setText(
+                "Companion for testicecam2.apk (root).\n" +
+                "1) Install & open testicecam2\n" +
+                "2) Setup → Attach (or Spawn)\n" +
+                "3) Use camera app 1–2 min → Share log\n\n" +
+                "Log: " + ReToolEngine.LOG_PUBLIC + "\n" +
+                "Pull: " + ReToolEngine.PULL_DIR);
         hint.setTextColor(UiKit.MUTED);
         hint.setTextSize(12f);
         root.addView(hint);
 
         statusView = new TextView(this);
         statusView.setTextColor(UiKit.CYAN);
-        statusView.setTextSize(11f);
+        statusView.setTextSize(10f);
+        statusView.setTypeface(android.graphics.Typeface.MONOSPACE);
         statusView.setPadding(0, dp(8), 0, dp(4));
         root.addView(statusView);
 
         root.addView(row(
-                btn("1. Setup", v -> runTask("setup", () -> capture.setupAll())),
-                btn("Status", v -> runTask("status", () -> capture.status()))
+                btn("Setup", v -> runTask("setup", () -> engine.setupAll())),
+                btn("Status", v -> runTask("status", () -> engine.status()))
         ));
         root.addView(row(
-                btn("2. Attach vcplax", v -> runTask("attach", () -> {
-                    String out = capture.startAttachCapture();
+                btn("Attach vcplax", v -> runTask("attach", () -> {
+                    String out = engine.startAttachCapture();
                     startTail();
                     return out;
                 })),
-                btn("2b. Spawn vcplax", v -> runTask("spawn", () -> {
-                    String out = capture.startSpawnCapture();
+                btn("Spawn vcplax", v -> runTask("spawn", () -> {
+                    String out = engine.startSpawnCapture();
                     startTail();
                     return out;
                 }))
         ));
         root.addView(row(
+                btn("Pull binaries", v -> runTask("pull", () -> engine.pullRuntimeArtifacts())),
                 btn("Stop", v -> runTask("stop", () -> {
                     stopTail();
-                    return capture.stopCapture();
-                })),
-                btn("Share log", v -> shareLog())
+                    return engine.stopCapture();
+                }))
+        ));
+        root.addView(row(
+                btn("Share log", v -> shareLog()),
+                btn("Open pull dir", v -> openPullDir())
         ));
 
         logView = new TextView(this);
@@ -94,7 +98,7 @@ public final class ReCaptureActivity extends Activity {
 
         setContentView(root);
         logger.setListener(text -> main.post(() -> logView.setText(text)));
-        appendUi("Ready · " + BuildInfo.BUILD_LABEL + "\nOpen main IceCam app, then Attach or Spawn.\n");
+        appendUi("Ready · " + BuildInfo.BUILD_LABEL + "\nInstall testicecam2.apk, open it once, then Setup here.\n");
         refreshStatus();
     }
 
@@ -109,13 +113,13 @@ public final class ReCaptureActivity extends Activity {
         new Thread(() -> {
             try {
                 String out = task.run();
-                logger.logBlock("re/" + tag, out);
+                logger.logBlock(tag, out);
                 main.post(() -> {
                     refreshStatus();
                     toast(tag + " done");
                 });
             } catch (Throwable t) {
-                logger.log("re/err", tag + ": " + t);
+                logger.log("err", tag + ": " + t);
                 main.post(() -> toast(tag + " failed: " + t.getMessage()));
             }
         }).start();
@@ -127,8 +131,8 @@ public final class ReCaptureActivity extends Activity {
         new Thread(() -> {
             while (tailRunning) {
                 try {
-                    String tail = capture.tailPublicLog(80);
-                    main.post(() -> statusView.setText("Live log tail:\n" + tail));
+                    String tail = engine.tailPublicLog(60);
+                    main.post(() -> statusView.setText("Live:\n" + tail));
                     Thread.sleep(2000);
                 } catch (Throwable ignored) {
                     break;
@@ -143,25 +147,30 @@ public final class ReCaptureActivity extends Activity {
 
     private void refreshStatus() {
         new Thread(() -> {
-            String st = capture.status();
+            String st = engine.status();
             main.post(() -> statusView.setText(st));
         }).start();
     }
 
     private void shareLog() {
         runTask("share", () -> {
-            String content = dev.icecam.app.Shell.su(
-                    "cat " + FridaReCapture.LOG_PUBLIC + " 2>/dev/null || echo '(empty)'"
+            String content = Shell.su(
+                    "cat " + ReToolEngine.LOG_PUBLIC + " 2>/dev/null || echo '(empty)'"
             ).out;
             main.post(() -> {
                 Intent send = new Intent(Intent.ACTION_SEND);
                 send.setType("text/plain");
                 send.putExtra(Intent.EXTRA_TEXT, content);
-                send.putExtra(Intent.EXTRA_SUBJECT, "icecam_re_capture.log");
+                send.putExtra(Intent.EXTRA_SUBJECT, "re_tool_capture.log");
                 startActivity(Intent.createChooser(send, "Send RE log"));
             });
-            return "share bytes=" + content.length();
+            return "bytes=" + content.length();
         });
+    }
+
+    private void openPullDir() {
+        toast("Files: " + ReToolEngine.PULL_DIR);
+        runTask("pull-ls", () -> Shell.su("ls -laR " + ReToolEngine.PULL_DIR + " 2>/dev/null || echo empty").all());
     }
 
     private void appendUi(String s) {
@@ -177,18 +186,19 @@ public final class ReCaptureActivity extends Activity {
         b.setText(label);
         b.setAllCaps(false);
         b.setOnClickListener(l);
-        b.setBackground(UiKit.fill(UiKit.PANEL, dp(14), 0x44ffffff));
+        b.setBackground(UiKit.fill(UiKit.PANEL, dp(12), 0x44ffffff));
         b.setTextColor(UiKit.TEXT);
+        b.setTextSize(11f);
         return b;
     }
 
     private LinearLayout row(View... views) {
         LinearLayout r = new LinearLayout(this);
         r.setOrientation(LinearLayout.HORIZONTAL);
-        r.setPadding(0, dp(4), 0, dp(4));
+        r.setPadding(0, dp(3), 0, dp(3));
         for (View v : views) {
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
-            lp.setMargins(dp(3), 0, dp(3), 0);
+            lp.setMargins(dp(2), 0, dp(2), 0);
             r.addView(v, lp);
         }
         return r;

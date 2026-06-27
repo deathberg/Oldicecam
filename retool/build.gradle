@@ -1,19 +1,18 @@
 plugins { id 'com.android.application' }
 
 android {
-    namespace 'dev.icecam.app'
+    namespace 'dev.icecam.retool'
     compileSdk 35
     defaultConfig {
-        applicationId 'dev.icecam.app'
+        applicationId 'dev.icecam.retool'
         minSdk 23
         targetSdk 35
-        versionCode 25
-        versionName '0.25-v25'
+        versionCode 1
+        versionName '1.0-re-tool'
     }
     buildTypes {
         debug { debuggable true; minifyEnabled false }
         release { minifyEnabled false }
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
-    packaging { jniLibs { useLegacyPackaging true } }
 }
