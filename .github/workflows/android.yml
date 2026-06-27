@@ -23,5 +23,5 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: IceCam-v24-compact-stable-ui-debug-apk
+          name: IceCam-debug-apk
           path: app/build/outputs/apk/debug/*.apk
