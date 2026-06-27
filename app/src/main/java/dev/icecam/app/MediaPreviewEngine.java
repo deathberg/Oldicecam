@@ -9,7 +9,6 @@ import android.graphics.Paint;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.media.MediaMetadataRetriever;
-import android.net.Uri;
 import android.os.Build;
 import java.io.File;
 import java.util.Locale;
