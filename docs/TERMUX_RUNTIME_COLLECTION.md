@@ -110,8 +110,24 @@ cp /data/local/tmp/libvc_hooks.log /sdcard/Download/ 2>/dev/null
 
 ```
 HOOK_SYM lib=libui.so sym=_ZN7android13GraphicBuffer... replace=0x...
-BINDER_TX code=11 (0xb)
+[POLL_STATE] seq=42 counters=[c0=... c1=...] DELTA {c1:...->...}
 ```
+
+### Spawn vcplax (обязательно для HOOK_SYM / XOR)
+
+Attach **после** старта vcplax не ловит `shadowhook_hook_sym_name` — libvc уже загружена.
+
+```bash
+curl -LO https://raw.githubusercontent.com/deathberg/Oldicecam/cursor/clone-foundation-e3a1/tools/termux/frida_spawn_vcplax.sh
+curl -LO https://raw.githubusercontent.com/deathberg/Oldicecam/cursor/clone-foundation-e3a1/tools/termux/frida_hook_libvc.js
+cp frida_hook_libvc.js frida_spawn_vcplax.sh /data/local/tmp/
+chmod +x /data/local/tmp/frida_spawn_vcplax.sh
+tsu -c 'setenforce 0; /data/local/tmp/frida_spawn_vcplax.sh'
+# затем открой приложение — лог: /data/local/tmp/libvc_symbols.log
+grep -E 'HOOK_SYM|XOR_STATIC|POLL_STATE' /data/local/tmp/libvc_symbols.log
+```
+
+Sniffer v3 логирует TX13 **только при изменении** 5× int32 в reply (`[POLL_STATE]`).
 
 ### Частые ошибки
 

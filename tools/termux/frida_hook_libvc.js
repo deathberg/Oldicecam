@@ -1,39 +1,49 @@
-// Advanced native Binder sniffer for vcplax (NO Java / NO Java.perform).
-// QuickJS: frida-inject -p $(pidof vcplax) -s frida_hook_libvc.js --runtime=qjs
+// vcplax native instrumentation: Binder sniffer + TX13 delta + libvc XOR symbol capture.
+// Attach:  frida-inject -p $(pidof vcplax) -s frida_hook_libvc.js --runtime=qjs
+// Spawn:   see frida_spawn_vcplax.sh (hooks dlopen before libvc init)
 'use strict';
 
-// ─── config ───────────────────────────────────────────────────────────────
 var CONFIG = {
   ONTRANSACT_OFFSET: ptr('0x43f8b4'),
+  LIBVC_INIT_OFFSET: ptr('0x774b0'),       // file VA in libvc.so (arm64)
   DUMP_LEN: 128,
   MAX_INTS: 12,
-  // TX13 = pollState @ ~1 Hz from App.java — suppress full blocks, show summary
+  DESCRIPTOR: 'com.xiaomi.vlive.IMyBinderService',
+
+  // TX13: no full hexdump blocks; log int[5] reply only when values change
   SUPPRESS_POLL_FULL: true,
-  POLL_SUMMARY_EVERY: 20,
-  // Log full [TX_START]..[TX_END] for these; empty = all non-poll
-  FULL_BLOCK_CODES: null,
-  DESCRIPTOR: 'com.xiaomi.vlive.IMyBinderService'
+  POLL_PARSE_REPLY: true,
+  POLL_LOG_DELTA_ONLY: true,
+  POLL_SUMMARY_EVERY: 60,
+
+  // XOR / hook symbol capture
+  HOOK_DLOPEN: true,
+  HOOK_DLSYM: true,
+  HOOK_SHADOWHOOK: true,
+  HOOK_LIBVC_INIT: true,
+  DUMP_XOR_RODATA: true,
+  XOR_BLOB_OFFSETS: [
+    { off: ptr('0x14ae86'), len: 0x13, keyOff: 0x08, name: 'lib_name' },
+    { off: ptr('0x14ae99'), len: 0x9f, keyOff: 0x7d, name: 'sym_1' },
+    { off: ptr('0x14af38'), len: 0x9d, keyOff: 0x7f, name: 'sym_2' },
+    { off: ptr('0x14afd5'), len: 0x99, keyOff: 0x29, name: 'sym_3' },
+    { off: ptr('0x14b06e'), len: 0x34, keyOff: 0x4f, name: 'sym_4' },
+    { off: ptr('0x14b0a2'), len: 0x28, keyOff: 0x51, name: 'sym_5' }
+  ],
+
+  FULL_BLOCK_CODES: null
 };
 
 var TX_NAMES = {
-  11: 'PLAY_SOURCE',
-  12: 'STOP_OR_QUERY',
-  13: 'POLL_STATE',
-  14: 'SET_MODE',
-  15: 'GET_STATUS',
-  16: 'SET_AUTO_ROTATE',
-  17: 'SET_LOOP',
-  18: 'SET_ANGLE',
-  19: 'SET_MIRROR',
-  22: 'SEEK_RANGE',
-  24: 'TRANSFORM',
-  25: 'HARD_RECOVERY'
+  11: 'PLAY_SOURCE', 12: 'STOP_OR_QUERY', 13: 'POLL_STATE', 14: 'SET_MODE',
+  15: 'GET_STATUS', 16: 'SET_AUTO_ROTATE', 17: 'SET_LOOP', 18: 'SET_ANGLE',
+  19: 'SET_MIRROR', 22: 'SEEK_RANGE', 24: 'TRANSFORM', 25: 'HARD_RECOVERY'
 };
 
 var TX_JAVA_HINT = {
   11: 'writeString path + int0 + loop',
   12: 'empty + reply int',
-  13: 'empty IN -> int[5] OUT (daemon counters)',
+  13: 'empty IN -> int[5] OUT (pipeline counters)',
   14: 'writeInt mode + writeString path',
   15: 'empty -> status int (5=playing)',
   16: 'writeInt bool loop-rotate flag',
@@ -42,10 +52,9 @@ var TX_JAVA_HINT = {
   19: 'writeInt bool mirror',
   22: 'writeLong beginUs + writeLong endUs',
   24: 'int mode + 4x float + int colorMode',
-  25: 'empty -> toggle recovery'
+  25: 'empty -> toggle recovery (reply void)'
 };
 
-// arm64 Parcel layout candidates (Android 11–14)
 var PARCEL_LAYOUTS = [
   { data: 0x08, size: 0x10, pos: 0x20, cap: 0x18 },
   { data: 0x10, size: 0x18, pos: 0x28, cap: 0x20 },
@@ -55,12 +64,13 @@ var PARCEL_LAYOUTS = [
 var seq = 0;
 var pollCount = 0;
 var pollSummaryLast = 0;
+var lastPollCounters = null;
 var shadowhookInstalled = false;
+var libvcInitHooked = false;
 var onTransactInstalled = false;
+var libvcHookStatePtr = null;
 
-function log(msg) {
-  console.log(msg);
-}
+function log(msg) { console.log(msg); }
 
 function line(ch, n) {
   var s = '';
@@ -68,23 +78,13 @@ function line(ch, n) {
   return s;
 }
 
-function txName(code) {
-  return TX_NAMES[code] || ('UNKNOWN_' + code);
-}
-
-function shouldFullBlock(code) {
-  if (code === 13 && CONFIG.SUPPRESS_POLL_FULL) return false;
-  if (CONFIG.FULL_BLOCK_CODES && CONFIG.FULL_BLOCK_CODES.indexOf(code) === -1) return false;
-  return true;
-}
+function txName(code) { return TX_NAMES[code] || ('UNKNOWN_' + code); }
 
 function readCppString(p) {
   if (p.isNull()) return '<null>';
   try {
     var tag = p.readU8();
-    if ((tag & 1) === 0) {
-      return p.add(1).readUtf8String();
-    }
+    if ((tag & 1) === 0) return p.add(1).readUtf8String();
     var len = p.add(8).readU64();
     var data = p.add(16).readPointer();
     if (data.isNull()) return '<empty>';
@@ -98,31 +98,15 @@ function findModule(namePart) {
   var found = null;
   Process.enumerateModules().forEach(function (m) {
     if (found) return;
-    if (m.name.indexOf(namePart) !== -1 || m.path.indexOf(namePart) !== -1) {
-      found = m;
-    }
+    if (m.name.indexOf(namePart) !== -1 || m.path.indexOf(namePart) !== -1) found = m;
   });
   return found;
 }
 
 function u32(buf, off) {
   if (off + 4 > buf.length) return null;
-  return (buf[off] & 0xff) |
-    ((buf[off + 1] & 0xff) << 8) |
-    ((buf[off + 2] & 0xff) << 16) |
-    ((buf[off + 3] & 0xff) << 24);
-}
-
-function u64(buf, off) {
-  if (off + 8 > buf.length) return null;
-  var lo = u32(buf, off);
-  var hi = u32(buf, off + 4);
-  if (lo === null || hi === null) return null;
-  return hi * 0x100000000 + (lo >>> 0);
-}
-
-function isPrintableAscii(c) {
-  return c >= 0x20 && c <= 0x7e;
+  return (buf[off] & 0xff) | ((buf[off + 1] & 0xff) << 8) |
+    ((buf[off + 2] & 0xff) << 16) | ((buf[off + 3] & 0xff) << 24);
 }
 
 function probeParcelLayout(parcelPtr) {
@@ -138,7 +122,6 @@ function probeParcelLayout(parcelPtr) {
       if (dataPtr.isNull()) continue;
       if (Number(dataSize) === 0 || Number(dataSize) > 65536) continue;
       if (Number(dataPos) > Number(dataSize)) continue;
-      // validate: read first bytes
       dataPtr.readU8();
       return {
         layout: lay,
@@ -147,9 +130,7 @@ function probeParcelLayout(parcelPtr) {
         dataPos: Number(dataPos),
         dataCap: cap ? Number(cap) : 0
       };
-    } catch (e) {
-      /* try next layout */
-    }
+    } catch (e) { /* next */ }
   }
   return null;
 }
@@ -163,109 +144,199 @@ function readParcelBytes(info, fromPos, maxLen) {
   if (maxLen !== undefined && len > maxLen) len = maxLen;
   try {
     return new Uint8Array(info.dataPtr.add(start).readByteArray(len));
-  } catch (e) {
-    return null;
-  }
+  } catch (e) { return null; }
 }
 
-function parseStrictModeString16(buf, off) {
-  if (!buf || off + 8 > buf.length) return null;
-  var strict = u32(buf, off);
-  var charLen = u32(buf, off + 4);
-  if (charLen === null || charLen <= 0 || charLen > 512) return null;
-  var byteLen = charLen * 2;
-  var start = off + 8;
-  if (start + byteLen > buf.length) return null;
-  var s = '';
-  var i;
-  for (i = 0; i < charLen; i++) {
-    var lo = buf[start + i * 2];
-    var hi = buf[start + i * 2 + 1];
-    if (hi !== 0) break;
-    if (!isPrintableAscii(lo)) break;
-    s += String.fromCharCode(lo);
-  }
-  var padded = byteLen;
-  if (padded % 4 !== 0) padded += 4 - (padded % 4);
-  return {
-    strict: strict,
-    text: s,
-    nextOff: start + padded
-  };
-}
+function parseReplyInt32Array(parcelPtr) {
+  var info = probeParcelLayout(parcelPtr);
+  if (!info) return null;
+  var raw = readParcelBytes(info, 0, 64);
+  if (!raw || raw.length < 8) return null;
 
-function scanAsciiRuns(buf, minLen) {
-  minLen = minLen || 4;
-  var out = [];
-  if (!buf) return out;
-  var i = 0, run = '';
-  while (i < buf.length) {
-    if (isPrintableAscii(buf[i])) {
-      run += String.fromCharCode(buf[i]);
-    } else {
-      if (run.length >= minLen) out.push(run);
-      run = '';
+  // Layout A: writeNoException(0) + writeInt32(len) + len × int32
+  var off = 0;
+  var exc = u32(raw, off);
+  if (exc !== 0) off = 0;
+  else off = 4;
+
+  var len = u32(raw, off);
+  if (len === null || len <= 0 || len > 32) {
+    // Layout B: flat int32[5] without length prefix (fallback)
+    var flat = [];
+    var j;
+    for (j = 0; j < 5; j++) {
+      var v = u32(raw, off + j * 4);
+      if (v === null) break;
+      flat.push(v | 0);
     }
-    i++;
+    return flat.length >= 5 ? flat : null;
   }
-  if (run.length >= minLen) out.push(run);
-  return out;
+
+  var out = [];
+  var k;
+  for (k = 0; k < len; k++) {
+    var val = u32(raw, off + 4 + k * 4);
+    if (val === null) break;
+    out.push(val | 0);
+  }
+  return out.length > 0 ? out : null;
 }
 
-function scanUtf16LeStrings(buf, minChars) {
-  minChars = minChars || 4;
-  var out = [];
-  if (!buf || buf.length < 8) return out;
-  var i = 0;
-  while (i + 4 <= buf.length) {
-    var charLen = u32(buf, i);
-    if (charLen !== null && charLen >= minChars && charLen < 256) {
-      var need = 4 + charLen * 2;
-      if (i + need <= buf.length) {
-        var s = '';
-        var ok = true, j;
-        for (j = 0; j < charLen; j++) {
-          var lo = buf[i + 4 + j * 2];
-          var hi = buf[i + 4 + j * 2 + 1];
-          if (hi !== 0 || !isPrintableAscii(lo)) { ok = false; break; }
-          s += String.fromCharCode(lo);
-        }
-        if (ok && s.length >= minChars) {
-          out.push('@' + i + ':' + s);
-          i += need;
-          if (i % 4 !== 0) i += 4 - (i % 4);
-          continue;
-        }
+function pollCountersChanged(a, b) {
+  if (!a || !b || a.length !== b.length) return true;
+  var i;
+  for (i = 0; i < a.length; i++) if (a[i] !== b[i]) return true;
+  return false;
+}
+
+function formatPollCounters(arr) {
+  if (!arr) return '<parse_fail>';
+  var labels = ['c0', 'c1', 'c2', 'c3', 'c4'];
+  var parts = [];
+  var i;
+  for (i = 0; i < arr.length; i++) {
+    parts.push((labels[i] || ('c' + i)) + '=' + arr[i] + '(0x' + (arr[i] >>> 0).toString(16) + ')');
+  }
+  return parts.join(' ');
+}
+
+function logPollDelta(counters, prev) {
+  var delta = [];
+  var i;
+  if (prev && counters) {
+    for (i = 0; i < counters.length; i++) {
+      if (i >= prev.length || counters[i] !== prev[i]) {
+        delta.push('c' + i + ':' + prev[i] + '->' + counters[i]);
       }
     }
-    i += 4;
   }
-  return out;
+  log('[POLL_STATE] seq=' + pollCount + ' counters=[' + formatPollCounters(counters) + ']' +
+      (delta.length ? ' DELTA {' + delta.join(', ') + '}' : ' (first sample)'));
 }
 
-function formatInts(buf, startOff, count) {
-  var ints = [];
-  var i, v;
-  if (!buf) return ints;
-  for (i = 0; i < count; i++) {
-    v = u32(buf, startOff + i * 4);
-    if (v === null) break;
-    ints.push('0x' + (v >>> 0).toString(16) + '(' + (v | 0) + ')');
-  }
-  return ints;
-}
-
-function formatFloatsFromInts(buf, startOff, count) {
+function decodeXorString(base, blobOff, length, keyByte) {
   var out = [];
-  var i, bits;
-  if (!buf) return out;
-  for (i = 0; i < count; i++) {
-    bits = u32(buf, startOff + i * 4);
-    if (bits === null) break;
-    // QJS-safe: show hex bits; user can decode offline
-    out.push('f32_bits=0x' + (bits >>> 0).toString(16));
+  var i, b, seed;
+  seed = 7;
+  for (i = 0; i < length; i++) {
+    b = seed ^ base.add(blobOff).add(i).readU8();
+    seed = (seed + 0x1f) & 0xff;
+    out.push((((i + b - 0x11) ^ (keyByte + i)) & 0xff));
   }
-  return out;
+  try {
+    return String.fromCharCode.apply(null, out);
+  } catch (e) {
+    return out.map(function (c) { return ('0' + c.toString(16)).slice(-2); }).join('');
+  }
+}
+
+function dumpStaticXorTable(libvcBase, hookState) {
+  if (!CONFIG.DUMP_XOR_RODATA || !libvcBase) return;
+  var keyBase = hookState;
+  if (keyBase.isNull()) keyBase = libvcBase;
+  CONFIG.XOR_BLOB_OFFSETS.forEach(function (entry) {
+    var keyByte = 0;
+    try { keyByte = keyBase.add(entry.keyOff).readU8(); } catch (e) { keyByte = 0; }
+    var decoded = decodeXorString(libvcBase, entry.off, entry.len, keyByte);
+    log('[XOR_STATIC] ' + entry.name + ' key@+' + entry.keyOff.toString(16) +
+        '(0x' + keyByte.toString(16) + ') => "' + decoded + '"');
+  });
+}
+
+function installLibvcInitHook(mod) {
+  if (libvcInitHooked || !CONFIG.HOOK_LIBVC_INIT || !mod) return;
+  var initAddr = mod.base.add(CONFIG.LIBVC_INIT_OFFSET);
+  try {
+    Interceptor.attach(initAddr, {
+      onEnter: function (args) {
+        this.ctx = args[0];
+        log('[libvc init] enter ctx=' + this.ctx);
+      },
+      onLeave: function (retval) {
+        log('[libvc init] leave ret=' + retval.toInt32());
+        dumpStaticXorTable(mod.base, this.ctx);
+      }
+    });
+    libvcInitHooked = true;
+    log('[+] libvc init hook @ ' + initAddr);
+  } catch (e) {
+    log('[!] libvc init hook failed: ' + e);
+  }
+}
+
+function installShadowhookHooks() {
+  if (shadowhookInstalled) return;
+  var hooked = 0;
+
+  var hookSym = Module.findExportByName(null, 'shadowhook_hook_sym_name');
+  if (hookSym && CONFIG.HOOK_SHADOWHOOK) {
+    Interceptor.attach(hookSym, {
+      onEnter: function (args) {
+        var lib = readCppString(args[0]);
+        var sym = readCppString(args[1]);
+        log('[HOOK_SYM] lib="' + lib + '" sym="' + sym + '" replace=' + args[2]);
+      }
+    });
+    hooked++;
+  }
+
+  var hookInit = Module.findExportByName(null, 'shadowhook_init');
+  if (hookInit && CONFIG.HOOK_SHADOWHOOK) {
+    Interceptor.attach(hookInit, {
+      onEnter: function (args) {
+        log('[shadowhook_init] mode=' + args[0] + ' debug=' + args[1]);
+      }
+    });
+    hooked++;
+  }
+
+  if (hooked > 0) {
+    shadowhookInstalled = true;
+    log('[+] shadowhook hooks active (' + hooked + ')');
+  }
+}
+
+function hookDlopen() {
+  if (!CONFIG.HOOK_DLOPEN) return;
+  ['dlopen', 'android_dlopen_ext'].forEach(function (name) {
+    var addr = Module.findExportByName(null, name);
+    if (!addr) return;
+    Interceptor.attach(addr, {
+      onEnter: function (args) {
+        try { this.path = args[0].readCString(); } catch (e) { this.path = '?'; }
+      },
+      onLeave: function (retval) {
+        if (retval.isNull() || !this.path) return;
+        log('[dlopen] ' + this.path + ' => ' + retval);
+        if (this.path.indexOf('libvc++.so') !== -1 || this.path.indexOf('shadowhook') !== -1) {
+          installShadowhookHooks();
+        }
+        if (this.path.indexOf('libvc.so') !== -1) {
+          var mod = Process.findModuleByName('libvc.so');
+          if (mod) installLibvcInitHook(mod);
+        }
+      }
+    });
+    log('[+] hooked ' + name);
+  });
+}
+
+function hookDlsym() {
+  if (!CONFIG.HOOK_DLSYM) return;
+  var addr = Module.findExportByName(null, 'dlsym');
+  if (!addr) return;
+  Interceptor.attach(addr, {
+    onEnter: function (args) {
+      try { this.sym = args[1].readCString(); } catch (e) { this.sym = '?'; }
+    },
+    onLeave: function (retval) {
+      if (!this.sym || retval.isNull()) return;
+      if (this.sym.indexOf('init') !== -1 || this.sym.indexOf('hook') !== -1) {
+        log('[dlsym] sym="' + this.sym + '" => ' + retval);
+      }
+    }
+  });
+  log('[+] hooked dlsym');
 }
 
 function dumpParcelSide(label, parcelPtr, dumpLen) {
@@ -278,188 +349,78 @@ function dumpParcelSide(label, parcelPtr, dumpLen) {
   var info = probeParcelLayout(parcelPtr);
   if (!info) {
     lines.push(label + ': <layout probe failed>');
-    try {
-      lines.push(hexdump(parcelPtr, { offset: 0, length: 64, header: true, ansi: false }));
-    } catch (e2) {
-      lines.push(label + ': hexdump err ' + e2);
-    }
     return lines;
   }
-  lines.push(label + '_meta size=' + info.dataSize + ' pos=' + info.dataPos + ' cap=' + info.dataCap);
+  lines.push(label + '_meta size=' + info.dataSize + ' pos=' + info.dataPos);
   var rawAll = readParcelBytes(info, 0, dumpLen);
-  var rawPayload = readParcelBytes(info, info.dataPos, dumpLen);
   if (rawAll) {
     lines.push(label + '_HEX_ALL (first ' + rawAll.length + ' bytes @0):');
     lines.push(hexdump(info.dataPtr, { offset: 0, length: rawAll.length, header: true, ansi: false }));
   }
-  if (rawPayload && info.dataPos > 0) {
-    lines.push(label + '_HEX_PAYLOAD (from pos ' + info.dataPos + '):');
-    lines.push(hexdump(info.dataPtr.add(info.dataPos), {
-      offset: 0, length: rawPayload.length, header: true, ansi: false
-    }));
-  }
-  var tok = rawAll ? parseStrictModeString16(rawAll, 0) : null;
-  if (tok) {
-    lines.push(label + '_TOKEN strict=' + tok.strict + ' desc="' + tok.text + '"');
-    if (tok.text.indexOf(CONFIG.DESCRIPTOR) !== -1) {
-      lines.push(label + '_TOKEN ok IMyBinderService');
-    }
-    var payloadOff = tok.nextOff;
-    var payload = readParcelBytes(info, payloadOff, dumpLen);
-    if (payload && payload.length >= 4) {
-      lines.push(label + '_INT32 @token_end: ' + formatInts(payload, 0, CONFIG.MAX_INTS).join(' '));
-      if (payload.length >= 16) {
-        lines.push(label + '_FLOAT_HINT: ' + formatFloatsFromInts(payload, 0, 4).join(' '));
-      }
-    }
-  } else if (rawPayload) {
-    lines.push(label + '_INT32 @pos: ' + formatInts(rawPayload, 0, CONFIG.MAX_INTS).join(' '));
-  }
-  var ascii = scanAsciiRuns(rawAll, 4);
-  if (ascii.length) lines.push(label + '_ASCII: ' + ascii.join(' | '));
-  var u16 = scanUtf16LeStrings(rawAll, 4);
-  if (u16.length) lines.push(label + '_UTF16: ' + u16.join(' | '));
   return lines;
 }
 
 function logTxBlock(ctx) {
-  var code = ctx.code;
-  var name = txName(code);
-  var hint = TX_JAVA_HINT[code] || '';
   var border = line('=', 72);
   var mid = line('-', 72);
-
   log(border);
-  log('[TX_START] seq=' + ctx.seq + ' code=' + code + ' (0x' + code.toString(16) + ') name=' + name);
-  log('[TX_HINT]  ' + hint);
-  log('[TX_META]  flags=0x' + (ctx.flags >>> 0).toString(16) + ' this=' + ctx.thiz +
-      ' data=' + ctx.data + ' reply=' + ctx.reply);
+  log('[TX_START] seq=' + ctx.seq + ' code=' + ctx.code + ' (0x' + ctx.code.toString(16) + ') name=' + txName(ctx.code));
+  log('[TX_HINT]  ' + (TX_JAVA_HINT[ctx.code] || ''));
+  log('[TX_META]  flags=0x' + (ctx.flags >>> 0).toString(16));
   log(mid);
-
   var i;
   for (i = 0; i < ctx.dataLines.length; i++) log(ctx.dataLines[i]);
   log(mid);
-  log('[TX_END]   seq=' + ctx.seq + ' retval=' + ctx.retval +
-      ' reply_summary=' + ctx.replySummary);
+  log('[TX_END]   seq=' + ctx.seq + ' retval=' + ctx.retval);
   for (i = 0; i < ctx.replyLines.length; i++) log(ctx.replyLines[i]);
   log(border);
   log('');
 }
 
-function summarizeReply(parcelPtr) {
-  var info = probeParcelLayout(parcelPtr);
-  if (!info) return 'probe_fail';
-  var raw = readParcelBytes(info, info.dataPos, 64);
-  if (!raw || raw.length === 0) return 'empty pos=' + info.dataPos;
-  var ints = formatInts(raw, 0, 8);
-  return 'size=' + info.dataSize + ' pos=' + info.dataPos + ' ints=' + ints.join(',');
-}
-
 function onTransactHandler(args) {
   var code = args[1].toInt32();
-  var flags = args[4].toInt32();
-  var thiz = args[0];
-  var data = args[2];
-  var reply = args[3];
+  this._code = code;
+  this._reply = args[3];
 
-  // Background poll flood — compact summary
   if (code === 13 && CONFIG.SUPPRESS_POLL_FULL) {
     pollCount++;
+    this._pollOnly = true;
     if (pollCount - pollSummaryLast >= CONFIG.POLL_SUMMARY_EVERY) {
       pollSummaryLast = pollCount;
-      log('[POLL_SUMMARY] TX13 count=' + pollCount + ' (App.java ~1Hz pollState, NOT button events)');
+      log('[POLL_SUMMARY] TX13 ticks=' + pollCount + ' (~1Hz App.java pollState)');
     }
-    this._pollOnly = true;
-    this._code = code;
-    this._reply = reply;
     return;
   }
 
-  if (code < 0x0b || code > 0x19) {
-    return;
-  }
-
-  if (!shouldFullBlock(code)) {
-    return;
-  }
+  if (code < 0x0b || code > 0x19) return;
 
   this._pollOnly = false;
   this._seq = ++seq;
-  this._code = code;
-  this._flags = flags;
-  this._thiz = thiz;
-  this._data = data;
-  this._reply = reply;
-  this._t0 = Date.now();
-  this._dataLines = dumpParcelSide('DATA', data, CONFIG.DUMP_LEN);
+  this._flags = args[4].toInt32();
+  this._dataLines = dumpParcelSide('DATA', args[2], CONFIG.DUMP_LEN);
 }
 
 function onTransactLeave(retval) {
-  if (this._pollOnly) {
-    // optional: one-line poll reply every N
+  if (this._code === 13 && this._pollOnly) {
+    if (CONFIG.POLL_PARSE_REPLY) {
+      var counters = parseReplyInt32Array(this._reply);
+      if (counters) {
+        if (!CONFIG.POLL_LOG_DELTA_ONLY || pollCountersChanged(counters, lastPollCounters)) {
+          logPollDelta(counters, lastPollCounters);
+          lastPollCounters = counters.slice();
+        }
+      }
+    }
     return;
   }
   if (this._seq === undefined) return;
-
-  var ctx = {
+  logTxBlock({
     seq: this._seq,
     code: this._code,
     flags: this._flags,
-    thiz: this._thiz,
-    data: this._data,
-    reply: this._reply,
     retval: retval.toInt32(),
     dataLines: this._dataLines,
-    replyLines: dumpParcelSide('REPLY', this._reply, CONFIG.DUMP_LEN),
-    replySummary: summarizeReply(this._reply)
-  };
-  logTxBlock(ctx);
-}
-
-function installShadowhookHooks() {
-  if (shadowhookInstalled) return;
-  var hooked = 0;
-  var hookSym = Module.findExportByName(null, 'shadowhook_hook_sym_name');
-  if (hookSym) {
-    Interceptor.attach(hookSym, {
-      onEnter: function (args) {
-        log('HOOK_SYM lib=' + readCppString(args[0]) +
-            ' sym=' + readCppString(args[1]) + ' replace=' + args[2]);
-      }
-    });
-    hooked++;
-  }
-  var hookInit = Module.findExportByName(null, 'shadowhook_init');
-  if (hookInit) {
-    Interceptor.attach(hookInit, {
-      onEnter: function (args) {
-        log('shadowhook_init mode=' + args[0] + ' debug=' + args[1]);
-      }
-    });
-    hooked++;
-  }
-  if (hooked > 0) {
-    shadowhookInstalled = true;
-    log('[+] shadowhook hooks active (' + hooked + ')');
-  }
-}
-
-function hookDlopen() {
-  ['dlopen', 'android_dlopen_ext'].forEach(function (name) {
-    var addr = Module.findExportByName(null, name);
-    if (!addr) return;
-    Interceptor.attach(addr, {
-      onEnter: function (args) {
-        try { this.path = args[0].readCString(); } catch (e) { this.path = '?'; }
-      },
-      onLeave: function (retval) {
-        if (retval.isNull() || !this.path) return;
-        if (this.path.indexOf('libvc') !== -1 || this.path.indexOf('shadowhook') !== -1) {
-          log('[dlopen] ' + this.path);
-          installShadowhookHooks();
-        }
-      }
-    });
+    replyLines: dumpParcelSide('REPLY', this._reply, CONFIG.DUMP_LEN)
   });
 }
 
@@ -468,21 +429,30 @@ function installVcplaxOnTransact() {
   var mod = findModule('vcplax');
   if (!mod) return;
   var addr = mod.base.add(CONFIG.ONTRANSACT_OFFSET);
-  log('[+] hook vcplax onTransact @ ' + addr + ' (base ' + mod.base + ')');
-  Interceptor.attach(addr, {
-    onEnter: onTransactHandler,
-    onLeave: onTransactLeave
-  });
+  Interceptor.attach(addr, { onEnter: onTransactHandler, onLeave: onTransactLeave });
   onTransactInstalled = true;
+  log('[+] hook vcplax onTransact @ ' + addr + ' (base ' + mod.base + ')');
 }
 
-// ─── native entry (no Java, no setImmediate) ───────────────────────────────
-log('=== vcplax Advanced Binder Sniffer (native / qjs) ===');
+function bootstrapLateAttach() {
+  var libvc = Process.findModuleByName('libvc.so');
+  if (libvc) {
+    installLibvcInitHook(libvc);
+    if (CONFIG.DUMP_XOR_RODATA) {
+      log('[!] libvc already loaded — static XOR needs spawn or vcplax restart under Frida');
+      dumpStaticXorTable(libvc.base, libvc.base);
+    }
+  }
+  installShadowhookHooks();
+  installVcplaxOnTransact();
+}
+
+log('=== vcplax Frida toolkit v3 (Binder + TX13 + XOR symbols) ===');
 log('arch=' + Process.arch + ' pid=' + Process.id);
-log('poll suppress=' + CONFIG.SUPPRESS_POLL_FULL + ' dump_len=' + CONFIG.DUMP_LEN);
+log('TX13 delta=' + CONFIG.POLL_LOG_DELTA_ONLY + ' XOR=' + CONFIG.DUMP_XOR_RODATA);
 
 hookDlopen();
-installShadowhookHooks();
-installVcplaxOnTransact();
+hookDlsym();
+bootstrapLateAttach();
 
-log('=== ready — each UI action should produce one [TX_START] block (except TX13 poll) ===');
+log('=== ready ===');
