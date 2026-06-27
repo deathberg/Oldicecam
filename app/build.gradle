@@ -1,0 +1,19 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'dev.icecam.app'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'dev.icecam.app'
+        minSdk 23
+        targetSdk 35
+        versionCode 25
+        versionName '0.25-v25-runtime-architecture'
+    }
+    buildTypes {
+        debug { debuggable true; minifyEnabled false }
+        release { minifyEnabled false }
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    packaging { jniLibs { useLegacyPackaging true } }
+}
