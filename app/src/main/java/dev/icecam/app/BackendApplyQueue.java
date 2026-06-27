@@ -137,10 +137,16 @@ public final class BackendApplyQueue {
                 int mode = binder.setModeString(1, req.path); // TX14 mode 1 -> path
                 long tx14Ms = android.os.SystemClock.elapsedRealtime() - tx14Start;
                 sleepMs(520);
-                TransformState current = TransformState.load(prefs);
+                StreamGeometry geom = StreamGeometry.load(prefs);
                 long tx11Start = android.os.SystemClock.elapsedRealtime();
-                int play = binder.playSource(req.path, current.mirrorH(), prefs.getBoolean("PlayisLoop", true)); // TX11
+                boolean loop = prefs.getBoolean("PlayisLoop", true);
+                int play = binder.playSource(req.path, loop);
                 long tx11Ms = android.os.SystemClock.elapsedRealtime() - tx11Start;
+                sleepMs(150);
+                binder.setAngle(geom.angleDegrees());
+                binder.setMirror(geom.mirrorH);
+                binder.setLoop(loop);
+                binder.setAutoRotate(geom.autoRotate);
                 boolean active = mode >= 0 && play >= 0;
                 prefs.edit()
                         .putBoolean("ReplacementActive", active)

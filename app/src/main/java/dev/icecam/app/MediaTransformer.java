@@ -24,6 +24,10 @@ public final class MediaTransformer {
     public static boolean isImagePath(String path) { return MediaPreviewEngine.isImagePath(path); }
     public static boolean isVideoPath(String path) { return MediaPreviewEngine.isVideoPath(path); }
 
+    public static String bakeImage(Context ctx, String sourcePath, StreamGeometry s, AppLogger log) {
+        return bakeImage(ctx, sourcePath, s == null ? new StreamGeometry().toPreviewTransform() : s.toPreviewTransform(), log);
+    }
+
     public static String bakeImage(Context ctx, String sourcePath, TransformState s, AppLogger log) {
         if (sourcePath == null || sourcePath.trim().isEmpty()) return sourcePath;
         if (!isImagePath(sourcePath)) {

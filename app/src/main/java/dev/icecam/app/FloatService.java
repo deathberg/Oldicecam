@@ -18,21 +18,15 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
-import dev.icecam.app.runtime.AppState;
 
-/**
- * Floating stream remote — pan/zoom/rotate/mirror + slot switching.
- * Replaces original face-seek controls with live stream geometry control.
- */
+/** Floating stream remote — RE protocol (no TX24 geometry). */
 public class FloatService extends Service {
-    private static final boolean FLOAT_AUTO_COMMIT = false;
-
     private WindowManager wm;
     private View panel;
     private WindowManager.LayoutParams lp;
     private SharedPreferences prefs;
     private SmartLogger slog;
-    private TransformController controller;
+    private StreamController stream;
     private TextView state;
     private Button startStopBtn;
     private int lastX, lastY;
@@ -44,7 +38,7 @@ public class FloatService extends Service {
         super.onCreate();
         prefs = getSharedPreferences("app_config", MODE_PRIVATE);
         slog = SmartLogger.get(this);
-        controller = TransformController.get(this);
+        stream = StreamController.get(this);
     }
 
     @Override public int onStartCommand(Intent i, int flags, int startId) {
@@ -61,7 +55,7 @@ public class FloatService extends Service {
 
     private void show() {
         if (Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(this)) {
-            toast("Разрешите «Поверх других окон»");
+            toast("Разрешите overlay");
             Intent it = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
             it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(it);
@@ -80,8 +74,6 @@ public class FloatService extends Service {
         panel = buildPanel();
         wm.addView(panel, lp);
         refresh();
-        controller.bus().store().addListener(appState -> refresh());
-        slog.i("float", BuildInfo.VERSION_NAME + " stream remote started");
     }
 
     private View buildPanel() {
@@ -98,20 +90,17 @@ public class FloatService extends Service {
 
         state = tv("", 9, false);
         state.setGravity(Gravity.CENTER);
-        state.setTextColor(0xffc8d8ea);
         box.addView(state);
 
-        startStopBtn = btn("● START STREAM", v -> startOrRestore(), UiKit.GREEN);
+        startStopBtn = btn("● START", v -> startOrRestore(), UiKit.GREEN);
         box.addView(startStopBtn, fullW(dp(40)));
 
-        // Zoom row
         LinearLayout rz = row();
         rz.addView(btn("＋", v -> mutate("zoom+")), weight());
         rz.addView(btn("ZOOM", v -> mutate("center")), weight());
         rz.addView(btn("－", v -> mutate("zoom-")), weight());
         box.addView(rz);
 
-        // D-pad
         LinearLayout rUp = row();
         rUp.addView(spacer(), weight());
         rUp.addView(btn("▲", v -> mutate("up")), weight());
@@ -130,7 +119,6 @@ public class FloatService extends Service {
         rDn.addView(spacer(), weight());
         box.addView(rDn);
 
-        // Rotate / mirror / fit
         LinearLayout rXform = row();
         rXform.addView(btn("↻90°", v -> mutate("rot+90")), weight());
         rXform.addView(btn("⇄", v -> mutate("mirror-x")), weight());
@@ -139,10 +127,9 @@ public class FloatService extends Service {
 
         LinearLayout rFit = row();
         rFit.addView(btn("FIT/FILL", v -> mutate("fit-fill")), weight());
-        rFit.addView(btn("APPLY", v -> commit()), weight());
+        rFit.addView(btn("APPLY", v -> { stream.commit(StreamController.Source.FLOAT); refreshDelayed(); }), weight());
         box.addView(rFit);
 
-        // Slot buttons M1–M4
         LinearLayout rSlots = row();
         for (int i = 1; i <= 4; i++) {
             final int slot = i;
@@ -157,27 +144,14 @@ public class FloatService extends Service {
         return box;
     }
 
-    private View spacer() {
-        View v = new View(this);
-        v.setBackgroundColor(Color.TRANSPARENT);
-        return v;
-    }
-
     private void selectSlot(int slot) {
         String path = prefs.getString("Slot" + slot + "Path", "");
-        if (path == null || path.isEmpty()) {
-            toast("M" + slot + " пуст — выберите медиа в приложении");
-            return;
-        }
-        controller.selectMedia(TransformController.Source.FLOAT, slot, path);
-        slog.event("float", "slot", "M" + slot);
-        if (prefs.getBoolean("ReplacementActive", false)) {
-            controller.startReplacement(TransformController.Source.FLOAT);
-        } else {
-            controller.commit(TransformController.Source.FLOAT, "float-slot-" + slot);
-        }
+        if (path.isEmpty()) { toast("M" + slot + " пуст"); return; }
+        stream.selectSlot(StreamController.Source.FLOAT, slot, path);
         refreshDelayed();
     }
+
+    private View spacer() { View v = new View(this); v.setBackgroundColor(Color.TRANSPARENT); return v; }
 
     private boolean drag(MotionEvent e) {
         switch (e.getAction()) {
@@ -196,21 +170,15 @@ public class FloatService extends Service {
     }
 
     private void startOrRestore() {
-        if (controller.isBusy()) { toast("Занято…"); return; }
-        if (prefs.getBoolean("ReplacementActive", false)) controller.restoreCamera(TransformController.Source.FLOAT);
-        else controller.startReplacement(TransformController.Source.FLOAT);
+        if (stream.isBusy()) { toast("Занято"); return; }
+        if (prefs.getBoolean("ReplacementActive", false)) stream.restoreCamera(StreamController.Source.FLOAT);
+        else stream.startReplacement(StreamController.Source.FLOAT);
         refreshDelayed();
     }
 
     private void mutate(String op) {
-        TransformState s = controller.mutate(TransformController.Source.FLOAT, op, FLOAT_AUTO_COMMIT);
-        slog.d("float", "op=" + op + " " + s.summary());
+        stream.mutate(StreamController.Source.FLOAT, op);
         refresh();
-    }
-
-    private void commit() {
-        controller.commit(TransformController.Source.FLOAT, "float-apply");
-        refreshDelayed();
     }
 
     private void openApp() {
@@ -222,20 +190,18 @@ public class FloatService extends Service {
     private void refreshDelayed() {
         refresh();
         if (state != null) {
-            state.postDelayed(this::refresh, 600);
-            state.postDelayed(this::refresh, 1500);
+            state.postDelayed(this::refresh, 800);
+            state.postDelayed(this::refresh, 2000);
         }
     }
 
     private void refresh() {
         if (state == null) return;
         boolean active = prefs.getBoolean("ReplacementActive", false);
-        boolean busy = controller.isBusy();
+        boolean busy = stream.isBusy();
         String phase = prefs.getString("IceCamState", "IDLE");
-        AppState app = controller.state();
-        TransformState s = app.transform;
-        int slot = Math.max(1, Math.min(4, app.media.activeSlot));
-        String kind = MediaPreviewEngine.mediaKind(app.media.originalPath);
+        StreamGeometry g = StreamGeometry.load(prefs);
+        int slot = activeSlot();
 
         if (startStopBtn != null) {
             if (busy) {
@@ -254,27 +220,20 @@ public class FloatService extends Service {
         }
 
         state.setText(String.format(java.util.Locale.US,
-                "%s · %s · M%d · %s\nz=%.2f rot=%d° mir=%s%s · %s",
-                active ? "LIVE" : "IDLE", phase, slot, kind,
-                s.zoomX, s.rotationQuadrant() == 3 ? -90 : s.rotationQuadrant() * 90,
-                s.mirrorH() ? "X" : "-", s.mirrorV() ? "Y" : "",
-                s.modeName()));
+                "%s · %s · M%d\n%s",
+                active ? "LIVE" : "IDLE", phase, slot, g.summary()));
         state.setTextColor(active ? 0xff62ff91 : 0xffdbe7f4);
         StreamForegroundService.refresh(this);
     }
 
-    private Button btn(String s, View.OnClickListener l) { return btn(s, l, UiKit.PANEL_3); }
+    private int activeSlot() { return Math.max(1, Math.min(4, prefs.getInt("ActiveSlot", 1))); }
 
+    private Button btn(String s, View.OnClickListener l) { return btn(s, l, UiKit.PANEL_3); }
     private Button btn(String s, View.OnClickListener l, int color) {
         Button b = new Button(this);
-        b.setText(s);
-        b.setAllCaps(false);
-        b.setTextSize(10);
-        b.setTextColor(Color.WHITE);
-        b.setTypeface(Typeface.DEFAULT_BOLD);
-        b.setPadding(0, 0, 0, 0);
-        b.setMinHeight(0);
-        b.setMinimumHeight(0);
+        b.setText(s); b.setAllCaps(false); b.setTextSize(10); b.setTextColor(Color.WHITE);
+        b.setTypeface(Typeface.DEFAULT_BOLD); b.setPadding(0, 0, 0, 0);
+        b.setMinHeight(0); b.setMinimumHeight(0);
         b.setBackground(UiKit.neonButton(color, UiKit.CYAN, dp(12)));
         b.setOnClickListener(l);
         return b;
@@ -282,9 +241,7 @@ public class FloatService extends Service {
 
     private TextView tv(String s, int sp, boolean bold) {
         TextView t = new TextView(this);
-        t.setText(s);
-        t.setTextSize(sp);
-        t.setTextColor(Color.WHITE);
+        t.setText(s); t.setTextSize(sp); t.setTextColor(Color.WHITE);
         if (bold) t.setTypeface(Typeface.DEFAULT_BOLD);
         return t;
     }

@@ -20,20 +20,18 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
-import dev.icecam.app.runtime.AppState;
 import java.util.ArrayList;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
     private static final int REQ_PICK = 7101;
-    private static final boolean MAIN_AUTO_COMMIT = false;
 
     private SmartLogger slog;
     private RootBootstrap root;
     private VliveBinderClient binder;
-    private TransformController controller;
+    private StreamController stream;
     private SharedPreferences prefs;
-    private TransformState tx;
+    private StreamGeometry geo;
 
     private LinearLayout body;
     private GpuMediaPreviewView mainPreview;
@@ -48,28 +46,22 @@ public class MainActivity extends Activity {
         super.onCreate(b);
         slog = SmartLogger.get(this);
         root = new RootBootstrap(this, slog.base());
-        binder = new VliveBinderClient(slog.base());
-        controller = TransformController.get(this);
+        stream = StreamController.get(this);
         prefs = getSharedPreferences("app_config", MODE_PRIVATE);
         prefs.edit()
                 .putString("ServerName", RootBootstrap.FIXED_SERVICE_NAME)
                 .putBoolean("EnableTx24Color", false)
                 .putBoolean("DebugLogging", true)
-                .putFloat("ColorCorrectStrength", 0.35f)
+                .putFloat("ColorCorrectStrength", 0.2f)
                 .putInt("ActiveSlot", Math.max(1, Math.min(4, prefs.getInt("ActiveSlot", 1))))
                 .apply();
-        tx = TransformState.load(prefs);
+        geo = StreamGeometry.load(prefs);
+        binder = stream.binder();
         binder.setPreferredService(RootBootstrap.FIXED_SERVICE_NAME);
         requestBasicPermissions();
         buildUi();
-        slog.i("app", BuildInfo.BUILD_LABEL + " started");
-        controller.bus().store().addListener(state -> refreshAll());
-        runBg(() -> {
-            root.bootstrap();
-            binder.clearCache();
-            binder.setPreferredService(RootBootstrap.FIXED_SERVICE_NAME);
-            refreshAll();
-        });
+        slog.i("app", BuildInfo.BUILD_LABEL + " RE-unified");
+        runBg(() -> { root.bootstrap(); stream.binder().clearCache(); refreshAll(); });
     }
 
     @Override protected void onDestroy() {
@@ -127,7 +119,7 @@ public class MainActivity extends Activity {
             @Override public void onSlotClick(int slot) { selectSlot(slot); }
             @Override public void onSlotLongPress(int slot) { pickIntoSlot(slot); }
         });
-        body.addView(slotGrid, new LinearLayout.LayoutParams(-1, dp(200)));
+        body.addView(slotGrid, new LinearLayout.LayoutParams(-1, dp(68)));
 
         rotationLabel = text("", 16, false, UiKit.MUTED);
         rotationLabel.setPadding(0, dp(6), 0, dp(4));
@@ -159,10 +151,7 @@ public class MainActivity extends Activity {
         LinearLayout row4 = row();
         row4.addView(bigButton("◀", v -> mutate("left"), UiKit.PANEL_3), weight());
         row4.addView(bigButton("▶", v -> mutate("right"), UiKit.PANEL_3), weight());
-        row4.addView(bigButton("APPLY", v -> {
-            controller.commit(TransformController.Source.MAIN, "main-apply");
-            refreshAll();
-        }, UiKit.CYAN_DARK), weight(1.2f));
+        row4.addView(bigButton("APPLY", v -> { stream.commit(StreamController.Source.MAIN); refreshAll(); }, UiKit.CYAN_DARK), weight(1.2f));
         body.addView(row4);
 
         mediaLabel = text("", 11, false, UiKit.MUTED);
@@ -202,11 +191,11 @@ public class MainActivity extends Activity {
     private void selectSlot(int slot) {
         String path = prefs.getString(slotKey(slot), "");
         if (path == null || path.isEmpty()) { pickIntoSlot(slot); return; }
-        controller.selectMedia(TransformController.Source.MAIN, slot, path);
+        stream.selectSlot(StreamController.Source.MAIN, slot, path);
         slog.event("media", "select", "M" + slot + " " + shortName(path));
         lastPreviewKey = "";
         refreshAll();
-        if (prefs.getBoolean("ReplacementActive", false)) controller.startReplacement(TransformController.Source.MAIN);
+        if (prefs.getBoolean("ReplacementActive", false)) stream.commit(StreamController.Source.MAIN);
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -216,34 +205,32 @@ public class MainActivity extends Activity {
             try { getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch (Throwable ignored) {}
             String path = MediaResolver.resolveToReadableFile(this, uri, slog.base());
             int slot = Math.max(1, Math.min(4, pendingPickSlot));
-            prefs.edit()
-                    .putString(slotKey(slot), path)
-                    .putInt("PlayFileType", MediaPreviewEngine.isVideoPath(path) ? 2 : 1)
-                    .apply();
-            controller.selectMedia(TransformController.Source.MAIN, slot, path);
+            stream.selectSlot(StreamController.Source.MAIN, slot, path);
             slog.event("media", "picked", "M" + slot + " " + MediaPreviewEngine.mediaKind(path));
             lastPreviewKey = "";
             refreshAll();
-            if (prefs.getBoolean("ReplacementActive", false)) controller.startReplacement(TransformController.Source.MAIN);
+            if (prefs.getBoolean("ReplacementActive", false)) stream.commit(StreamController.Source.MAIN);
         }
     }
 
     private void mutate(String op) {
-        controller.mutate(TransformController.Source.MAIN, op, MAIN_AUTO_COMMIT);
+        geo = stream.mutate(StreamController.Source.MAIN, op);
         refreshAll();
     }
 
     private void toggleLoop() {
-        boolean n = !prefs.getBoolean("PlayisLoop", true);
-        controller.setLoop(TransformController.Source.MAIN, n);
+        stream.setLoop(StreamController.Source.MAIN, !prefs.getBoolean("PlayisLoop", true));
         refreshAll();
     }
 
     private void startOrRestore() {
-        if (controller.isBusy()) { toast("Занято…"); return; }
-        if (prefs.getBoolean("ReplacementActive", false)) controller.restoreCamera(TransformController.Source.MAIN);
-        else controller.startReplacement(TransformController.Source.MAIN);
+        if (stream.isBusy()) { toast("Занято…"); return; }
+        if (prefs.getBoolean("ReplacementActive", false)) stream.restoreCamera(StreamController.Source.MAIN);
+        else stream.startReplacement(StreamController.Source.MAIN);
         refreshAll();
+        // refresh again after daemon spin-up
+        body.postDelayed(this::refreshAll, 1200);
+        body.postDelayed(this::refreshAll, 2800);
     }
 
     private void startFloatPanel() {
@@ -260,34 +247,32 @@ public class MainActivity extends Activity {
 
     private void refreshAll() {
         runOnUiThread(() -> {
-            AppState app = controller.state();
-            tx = app.transform;
+            geo = StreamGeometry.load(prefs);
             boolean active = prefs.getBoolean("ReplacementActive", false);
             String phase = prefs.getString("IceCamState", "IDLE");
-            boolean busy = controller.isBusy();
+            boolean busy = stream.isBusy();
 
             String p = prefs.getString("OriginalPlayFileMp4", prefs.getString("PlayFileMp4", ""));
-            String previewKey = p + "@" + tx.summary();
+            String previewKey = p + "@" + geo.summary();
             if (!previewKey.equals(lastPreviewKey)) {
                 lastPreviewKey = previewKey;
                 mainPreview.setMediaPath(p);
             }
-            mainPreview.setTransformState(tx);
+            mainPreview.setTransformState(geo.toPreviewTransform());
             mainPreview.setHighlighted(true);
-            slotGrid.bind(prefs, app);
+            slotGrid.bind(prefs, geo, activeSlot());
 
             String kind = MediaPreviewEngine.mediaKind(p);
             statusScreen.setText(String.format(Locale.US,
-                    "%s · %s · M%d · %s · z=%.2f\n%s · %s",
-                    active ? "● LIVE" : "○ IDLE", phase, activeSlot(), kind, tx.zoomX,
-                    tx.modeName(), tx.summary()));
+                    "%s · %s · M%d · %s · z=%.2f\n%s · bake=%s",
+                    active ? "● LIVE" : "○ IDLE", phase, activeSlot(), kind, geo.zoomX,
+                    geo.summary(), MediaPreviewEngine.isImagePath(p) ? "TX14→11" : "TX18/19"));
             statusScreen.setTextColor(active ? 0xffa7ffd2 : 0xffffd0a0);
 
-            rotationLabel.setText(String.format(Locale.US, "Rotation %d° · Mirror %s%s · %s",
-                    rotationLabelValue(), tx.mirrorH() ? "X" : "", tx.mirrorV() ? "Y" : "",
-                    BuildInfo.NATIVE_STACK_NOTE));
+            rotationLabel.setText(String.format(Locale.US, "Rotation %d° · Mirror %s%s · RE protocol",
+                    geo.angleDegrees(), geo.mirrorH ? "X" : "", geo.mirrorV ? "Y" : ""));
 
-            fillButton.setText(tx.mode == TransformState.MODE_FILL ? "FILL" : "FIT");
+            fillButton.setText(geo.mode == StreamGeometry.MODE_FILL ? "FILL" : "FIT");
             loopButton.setText(prefs.getBoolean("PlayisLoop", true) ? "LOOP ON" : "LOOP OFF");
 
             if (busy) {
@@ -311,10 +296,7 @@ public class MainActivity extends Activity {
         });
     }
 
-    private int rotationLabelValue() {
-        int deg = tx.rotationQuadrant() * 90;
-        return deg == 270 ? -90 : deg;
-    }
+    private int rotationLabelValue() { return geo.angleDegrees() == 270 ? -90 : geo.angleDegrees(); }
 
     private void shareLog() {
         try {

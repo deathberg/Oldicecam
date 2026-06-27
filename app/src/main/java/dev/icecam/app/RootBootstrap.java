@@ -41,16 +41,15 @@ public final class RootBootstrap {
                 "rm -rf /data/camera /data/samera\n" +
                 "mkdir -p /data/camera /data/local/tmp/icecam\n" +
                 "chattr -i /data/camera 2>/dev/null || true\n" +
+                "cp -f $SRC/vcplax.so /data/camera/vcplax\n" +
+                "cp -f $SRC/vcplax.so /data/vcplax\n" +
                 "cp -f $SRC/libvc.so /data/libvc.so\n" +
                 "cp -f $SRC/libshadowhook.so /data/libvc++.so\n" +
-                "# Expect ShadowHook 2.x in APK jniLibs (libshadowhook.so)\n" +
-                "# Camera inject tested API 23–35; Android 16 (API 36) requires updated hook symbols\n" +
-                "cp -f $SRC/libshadowhook.so /data/camera/libshadowhook.so\n" +
-                "cp -f $SRC/libvc.so /data/camera/libvc.so\n" +
-                "cp -f $SRC/vcplax.so /data/camera/vcplax\n" +
-                "cp -f $SRC/vcplax.so /data/vcplax 2>/dev/null || true\n" +
                 "chmod 700 /data/camera/vcplax /data/vcplax 2>/dev/null || true\n" +
-                "chmod 644 /data/libvc.so /data/libvc++.so /data/camera/libvc.so /data/camera/libshadowhook.so 2>/dev/null || true\n" +
+                "chmod 644 /data/libvc.so /data/libvc++.so 2>/dev/null || true\n" +
+                "cp -f $SRC/libvc.so /data/camera/libvc.so\n" +
+                "cp -f $SRC/libshadowhook.so /data/camera/libshadowhook.so\n" +
+                "chmod 644 /data/camera/libvc.so /data/camera/libshadowhook.so 2>/dev/null || true\n" +
                 "rm -f /data/camera/vcplax.log /data/camera/vcplax.err\n" +
                 "export LD_LIBRARY_PATH=/data/camera:/data:/system/lib64:/system_ext/lib64:/vendor/lib64:/system/lib:/system_ext/lib:/vendor/lib:$LD_LIBRARY_PATH\n" +
                 "export ICECAM_SERVER=$SERVER\n" +
