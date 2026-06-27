@@ -15,6 +15,7 @@ tools/*
 !tools/*.txt
 !tools/ghidra/
 !tools/r2/
+!tools/termux/
 tools/ghidra/*.log
 tools/r2/*.txt
 tools/jadx.zip
