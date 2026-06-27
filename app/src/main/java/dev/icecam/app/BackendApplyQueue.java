@@ -134,7 +134,7 @@ public final class BackendApplyQueue {
                     sleepMs(250);
                 }
                 long tx14Start = android.os.SystemClock.elapsedRealtime();
-                int mode = binder.setModeString(1, req.path); // TX14 mode 1 -> path
+                int mode = binder.setMode(1, req.path); // TX14 mode 1 -> path
                 long tx14Ms = android.os.SystemClock.elapsedRealtime() - tx14Start;
                 sleepMs(520);
                 StreamGeometry geom = StreamGeometry.load(prefs);

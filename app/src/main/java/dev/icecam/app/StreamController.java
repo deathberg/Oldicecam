@@ -152,10 +152,10 @@ public final class StreamController {
         String path = activePlayPath();
         if (MediaPreviewEngine.isVideoPath(path)) {
             binder.setAngle(g.angleDegrees());
-            binder.setMirror(g.mirrorH());
+            binder.setMirror(g.mirrorH);
             binder.setLoop(prefs.getBoolean("PlayisLoop", true));
-            binder.setAutoRotate(g.autoRotate());
-            slog.d("stream", "video native TX18=" + g.angleDegrees() + " TX19=" + g.mirrorH());
+            binder.setAutoRotate(g.autoRotate);
+            slog.d("stream", "video native TX18=" + g.angleDegrees() + " TX19=" + g.mirrorH);
         } else if (MediaPreviewEngine.isImagePath(path)) {
             scheduleImageBake(g);
         }
