@@ -7,3 +7,9 @@ local.properties
 .cxx/
 .externalNativeBuild/
 captures/
+
+# Reverse-engineering tooling (download locally; see decompiled/INDEX.md)
+tools/
+decompiled/jadx/
+decompiled/apktool/
+decompiled/raw/
