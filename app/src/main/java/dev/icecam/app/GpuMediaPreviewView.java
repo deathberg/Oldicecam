@@ -21,6 +21,7 @@ public final class GpuMediaPreviewView extends FrameLayout implements TextureVie
     private final TextureView texture;
     private final ImageView image;
     private final TextView badge;
+    private final TextView mediaLabel;
     private MediaPlayer player;
     private String mediaPath = "";
     private TransformState transform = new TransformState();
@@ -44,20 +45,45 @@ public final class GpuMediaPreviewView extends FrameLayout implements TextureVie
 
         badge = new TextView(ctx);
         badge.setTextColor(Color.WHITE);
-        badge.setTextSize(10);
-        badge.setPadding(dp(6), dp(3), dp(6), dp(3));
+        badge.setTextSize(9);
+        badge.setPadding(dp(5), dp(2), dp(5), dp(2));
         badge.setBackgroundColor(0xaa000000);
         LayoutParams bp = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START);
-        bp.setMargins(dp(4), dp(4), 0, 0);
+        bp.setMargins(dp(3), dp(3), 0, 0);
         addView(badge, bp);
+
+        mediaLabel = new TextView(ctx);
+        mediaLabel.setTextColor(0xffd8e8ff);
+        mediaLabel.setTextSize(8);
+        mediaLabel.setSingleLine(true);
+        mediaLabel.setPadding(dp(4), dp(2), dp(4), dp(2));
+        mediaLabel.setBackgroundColor(0xcc000000);
+        LayoutParams mp = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
+        addView(mediaLabel, mp);
         showImageLayer(true);
     }
 
+    public void setFramed(boolean framed, boolean active) {
+        int stroke = active ? 0xff17c7dd : 0xff4a5568;
+        int fill = active ? 0xff0a1824 : 0xff05070b;
+        if (framed) setBackground(UiKit.fill(fill, dp(6), stroke));
+        else setBackgroundColor(active ? 0xff0d2838 : 0xff05070b);
+    }
+
     public void setSlotLabel(String label) { badge.setText(label == null ? "" : label); }
+
+    public void setMediaLabel(String label) {
+        if (label == null || label.isEmpty()) {
+            mediaLabel.setVisibility(GONE);
+            mediaLabel.setText("");
+        } else {
+            mediaLabel.setVisibility(VISIBLE);
+            mediaLabel.setText(label);
+        }
+    }
     public void setHighlighted(boolean on) {
         highlighted = on;
-        setBackgroundColor(on ? 0xff0d2838 : 0xff05070b);
-        float a = on ? 1f : 0.92f;
+        float a = on ? 1f : 0.94f;
         setAlpha(a);
     }
 
@@ -106,6 +132,7 @@ public final class GpuMediaPreviewView extends FrameLayout implements TextureVie
         if (imagePrimary) image.bringToFront();
         else texture.bringToFront();
         badge.bringToFront();
+        mediaLabel.bringToFront();
     }
 
     private void startVideo(String path) {

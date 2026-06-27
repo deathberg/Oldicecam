@@ -41,6 +41,7 @@ public class MainActivity extends Activity {
     private LinearLayout advancedPanel;
     private int pendingPickSlot = 1;
     private String lastPreviewKey = "";
+    private final Runnable statusPoller = this::pollStatus;
 
     @Override public void onCreate(Bundle b) {
         super.onCreate(b);
@@ -64,7 +65,26 @@ public class MainActivity extends Activity {
         runBg(() -> { root.bootstrap(); stream.binder().clearCache(); refreshAll(); });
     }
 
+    @Override protected void onResume() {
+        super.onResume();
+        refreshAll();
+        body.removeCallbacks(statusPoller);
+        body.postDelayed(statusPoller, 900);
+    }
+
+    @Override protected void onPause() {
+        body.removeCallbacks(statusPoller);
+        super.onPause();
+    }
+
+    private void pollStatus() {
+        if (body == null) return;
+        refreshAll();
+        body.postDelayed(statusPoller, 1200);
+    }
+
     @Override protected void onDestroy() {
+        body.removeCallbacks(statusPoller);
         if (slotGrid != null) slotGrid.releaseAll();
         if (mainPreview != null) mainPreview.release();
         super.onDestroy();
@@ -102,6 +122,7 @@ public class MainActivity extends Activity {
         previewShell.setBackground(UiKit.fill(0xff05070b, dp(10), 0x66303a4f));
         mainPreview = new GpuMediaPreviewView(this);
         mainPreview.setSlotLabel("LIVE");
+        mainPreview.setFramed(true, true);
         previewShell.addView(mainPreview, new FrameLayout.LayoutParams(-1, -1));
         statusScreen = text("", 11, true, 0xffdffaff);
         statusScreen.setPadding(dp(10), dp(7), dp(10), dp(7));
@@ -119,7 +140,7 @@ public class MainActivity extends Activity {
             @Override public void onSlotClick(int slot) { selectSlot(slot); }
             @Override public void onSlotLongPress(int slot) { pickIntoSlot(slot); }
         });
-        body.addView(slotGrid, new LinearLayout.LayoutParams(-1, dp(68)));
+        body.addView(slotGrid, new LinearLayout.LayoutParams(-1, dp(76)));
 
         rotationLabel = text("", 16, false, UiKit.MUTED);
         rotationLabel.setPadding(0, dp(6), 0, dp(4));
@@ -224,11 +245,10 @@ public class MainActivity extends Activity {
     }
 
     private void startOrRestore() {
-        if (stream.isBusy()) { toast("Занято…"); return; }
+        if (stream.isStartStopBusy()) { toast("Запуск/остановка…"); return; }
         if (prefs.getBoolean("ReplacementActive", false)) stream.restoreCamera(StreamController.Source.MAIN);
         else stream.startReplacement(StreamController.Source.MAIN);
         refreshAll();
-        // refresh again after daemon spin-up
         body.postDelayed(this::refreshAll, 1200);
         body.postDelayed(this::refreshAll, 2800);
     }
@@ -248,26 +268,35 @@ public class MainActivity extends Activity {
     private void refreshAll() {
         runOnUiThread(() -> {
             geo = StreamGeometry.load(prefs);
-            boolean active = prefs.getBoolean("ReplacementActive", false);
-            String phase = prefs.getString("IceCamState", "IDLE");
-            boolean busy = stream.isBusy();
+            StreamStatus.View st = StreamStatus.read(this, stream, prefs, binder);
+            boolean live = st.live();
+            boolean applying = st.applying;
 
             String p = prefs.getString("OriginalPlayFileMp4", prefs.getString("PlayFileMp4", ""));
             String previewKey = p + "@" + geo.summary();
             if (!previewKey.equals(lastPreviewKey)) {
                 lastPreviewKey = previewKey;
                 mainPreview.setMediaPath(p);
+                mainPreview.setMediaLabel(shortName(p));
             }
             mainPreview.setTransformState(geo.toPreviewTransform());
             mainPreview.setHighlighted(true);
+            mainPreview.setFramed(true, true);
             slotGrid.bind(prefs, geo, activeSlot());
 
             String kind = MediaPreviewEngine.mediaKind(p);
+            String head = st.headline();
+            if (st.desynced()) head = "STALE";
             statusScreen.setText(String.format(Locale.US,
-                    "%s · %s · M%d · %s · z=%.2f\n%s · bake=%s",
-                    active ? "● LIVE" : "○ IDLE", phase, activeSlot(), kind, geo.zoomX,
-                    geo.summary(), MediaPreviewEngine.isImagePath(p) ? "TX14→11" : "TX18/19"));
-            statusScreen.setTextColor(active ? 0xffa7ffd2 : 0xffffd0a0);
+                    "%s · %s · M%d · %s · z=%.2f\n%s · %s",
+                    live ? "● " + head : "○ " + head, st.phase, activeSlot(), kind, geo.zoomX,
+                    geo.summary(), st.detail()));
+            int statusColor;
+            if (st.desynced()) statusColor = 0xffffb070;
+            else if (live) statusColor = 0xffa7ffd2;
+            else if (applying) statusColor = 0xff9ed4ff;
+            else statusColor = 0xffffd0a0;
+            statusScreen.setTextColor(statusColor);
 
             rotationLabel.setText(String.format(Locale.US, "Rotation %d° · Mirror %s%s · RE protocol",
                     geo.angleDegrees(), geo.mirrorH ? "X" : "", geo.mirrorV ? "Y" : ""));
@@ -275,11 +304,11 @@ public class MainActivity extends Activity {
             fillButton.setText(geo.mode == StreamGeometry.MODE_FILL ? "FILL" : "FIT");
             loopButton.setText(prefs.getBoolean("PlayisLoop", true) ? "LOOP ON" : "LOOP OFF");
 
-            if (busy) {
-                startRestoreButton.setText("● BUSY…");
+            if (st.startStopBusy) {
+                startRestoreButton.setText("● START/STOP…");
                 startRestoreButton.setBackground(UiKit.neonButton(UiKit.PANEL_3, UiKit.WARN, dp(14)));
                 startRestoreButton.setEnabled(false);
-            } else if (active) {
+            } else if (live) {
                 startRestoreButton.setText("■ STOP STREAM");
                 startRestoreButton.setBackground(UiKit.neonButton(UiKit.RED, 0xffff8090, dp(14)));
                 startRestoreButton.setEnabled(true);
@@ -292,7 +321,7 @@ public class MainActivity extends Activity {
             String play = prefs.getString("PlayFileMp4", "");
             mediaLabel.setText((play == null || play.isEmpty() ? "Нет медиа — нажмите M1–M4" : shortName(play))
                     + " · PNG/JPEG/HEIC/MP4/MOV · GPU preview");
-            fpsLabel.setText(slog.debugEnabled() ? "debug log ON · smart logger active" : "debug log OFF");
+            fpsLabel.setText(applying ? "backend sync…" : (slog.debugEnabled() ? "debug log ON" : "debug log OFF"));
         });
     }
 

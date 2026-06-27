@@ -50,7 +50,16 @@ public final class StreamController {
         binder.setPreferredService(RootBootstrap.FIXED_SERVICE_NAME);
     }
 
-    public boolean isBusy() { return busy || BackendApplyQueue.get(app).isRunning(); }
+    /** True only while start/stop thread is running — not geometry apply. */
+    public boolean isStartStopBusy() { return busy; }
+
+    /** True while TX14/TX11 queue is draining (geometry or full apply). */
+    public boolean isApplying() {
+        return BackendApplyQueue.get(app).isRunning() || pendingBake != null;
+    }
+
+    /** @deprecated use {@link #isStartStopBusy()} or {@link #isApplying()} */
+    public boolean isBusy() { return isStartStopBusy(); }
     public VliveBinderClient binder() { return binder; }
 
     public StreamGeometry geometry() { return StreamGeometry.load(prefs); }
@@ -165,11 +174,12 @@ public final class StreamController {
         if (pendingBake != null) main.removeCallbacks(pendingBake);
         final StreamGeometry snap = StreamGeometry.copy(g);
         pendingBake = () -> {
+            pendingBake = null;
             String original = prefs.getString("OriginalPlayFileMp4", "");
             if (original.isEmpty() || !MediaPreviewEngine.isImagePath(original)) return;
             String baked = MediaTransformer.bakeImage(app, original, snap, slog.base());
             prefs.edit().putString("PlayFileMp4", baked).putString("BakedPlayFileMp4", baked).apply();
-            BackendApplyQueue.get(app).enqueue(baked, "geometry-bake", false);
+            BackendApplyQueue.get(app).enqueueGeometry(baked, "geometry-bake");
             slog.i("stream", "baked replay " + baked);
         };
         main.postDelayed(pendingBake, BAKE_DEBOUNCE_MS);
