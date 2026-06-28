@@ -8,7 +8,7 @@ Ready-to-upload Android project for GitHub Actions.
 - Extended native RE: [docs/NATIVE_REVERSE_MAX.md](docs/NATIVE_REVERSE_MAX.md)
 - RE workspace setup: [re-workspace/README.md](re-workspace/README.md)
 - Auto native dump: [docs/native_analysis/](docs/native_analysis/)
-- Reconstructed original source (readable): [reconstructed/original-apk/](reconstructed/original-apk/)
+- Buildable app source: [app/src/main/java/dev/icecam/app/](app/src/main/java/dev/icecam/app/)
 - Decompile index: [decompiled/INDEX.md](decompiled/INDEX.md)
 
 ## v23 focus

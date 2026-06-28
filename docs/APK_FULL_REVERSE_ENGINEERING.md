@@ -66,7 +66,7 @@ ABI выбирается командой `file /system/bin/cameraserver` (32-bi
 
 ## 3. Binder IPC — `com.xiaomi.vlive.IMyBinderService`
 
-Прокси: `p059d1.C1391f` → реконструкция: `reconstructed/original-apk/.../binder/MyBinderClient.java`
+Прокси: `p059d1.C1391f` → реализация: `app/src/main/java/dev/icecam/app/VliveBinderClient.java`
 
 | TX | Метод | Parcel (write) | Success | Назначение |
 |---:|---|---|---|---|
@@ -228,7 +228,7 @@ Float overlay (FloatService / App.m1774h)
 
 ## 11. Реконструированный код
 
-Читаемая реконструкция оригинала: **`reconstructed/original-apk/`**
+Читаемая реконструкция оригинала встроена в **`app/`** (IceCam Core, package `dev.icecam.app`).
 
 Содержит деobfuscated Java для:
 

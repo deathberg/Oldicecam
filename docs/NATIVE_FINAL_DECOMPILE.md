@@ -53,7 +53,7 @@ BBinder::onTransact @ 0x43f8b4 (FUN_0053f8b4)
 
 ## 3. Таблица Binder TX (native ↔ Java)
 
-Java: `reconstructed/original-apk/.../MyBinderClient.java`
+Java: `app/src/main/java/dev/icecam/app/VliveBinderClient.java`
 
 | Code | Java TX | File VA handler | Назначение (из Ghidra) |
 |---:|---|---|---|

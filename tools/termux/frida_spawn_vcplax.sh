@@ -15,7 +15,7 @@ if [[ ! -x "$FRIDA_INJECT" ]]; then
   exit 1
 fi
 if [[ ! -f "$SCRIPT" ]]; then
-  echo "Missing $SCRIPT — copy frida_hook_libvc.js to /data/local/tmp/" >&2
+  echo "Missing $SCRIPT — copy app/src/main/assets/re/frida_hook_libvc.js to /data/local/tmp/" >&2
   exit 1
 fi
 

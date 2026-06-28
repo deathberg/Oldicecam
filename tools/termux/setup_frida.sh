@@ -70,8 +70,8 @@ cat <<'EOF'
 1) Open the camera app (vcplax must run):
      tsu -c "pidof vcplax"
 
-2) Download hook script:
-     curl -LO https://raw.githubusercontent.com/deathberg/Oldicecam/cursor/apk-full-reverse-e3a1/tools/termux/frida_hook_libvc.js
+2) Copy hook script from repo (canonical copy in APK assets):
+     cp ../../app/src/main/assets/re/frida_hook_libvc.js ~/frida_hook_libvc.js
 
 3) Attach (native-only, NO Java — use qjs runtime):
      tsu -c "setenforce 0"
