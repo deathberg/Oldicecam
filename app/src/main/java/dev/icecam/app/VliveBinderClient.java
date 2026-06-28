@@ -40,6 +40,9 @@ public final class VliveBinderClient {
     public String lastError() { return lastError; }
     public void clearCache() { cachedBinder = null; cachedName = null; lastError = "cache cleared"; }
 
+    /** Drop cached Binder reference when the owning component is destroyed. */
+    public void release() { clearCache(); }
+
     public String[] listServices() {
         try {
             Class<?> sm = Class.forName("android.os.ServiceManager");

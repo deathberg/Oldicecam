@@ -20,6 +20,12 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+import dev.icecam.app.config.ActionRanges;
+
 public class FloatService extends Service {
     private static final boolean FLOAT_AUTO_COMMIT = false;
 
@@ -28,6 +34,8 @@ public class FloatService extends Service {
     private WindowManager.LayoutParams lp;
     private SharedPreferences prefs;
     private AppLogger log;
+    private VliveBinderClient binder;
+    private ExecutorService txExecutor;
     private TransformController controller;
     private TextView state;
     private int lastX, lastY;
@@ -39,6 +47,9 @@ public class FloatService extends Service {
         super.onCreate();
         prefs = getSharedPreferences("app_config", MODE_PRIVATE);
         log = new AppLogger(this);
+        binder = new VliveBinderClient(log);
+        binder.setPreferredService(RootBootstrap.FIXED_SERVICE_NAME);
+        txExecutor = Executors.newSingleThreadExecutor(r -> new Thread(r, "float-tx22"));
         controller = TransformController.get(this);
     }
 
@@ -49,8 +60,18 @@ public class FloatService extends Service {
     }
 
     @Override public void onDestroy() {
+        if (txExecutor != null) {
+            txExecutor.shutdownNow();
+            try { txExecutor.awaitTermination(500, TimeUnit.MILLISECONDS); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+            txExecutor = null;
+        }
+        if (binder != null) {
+            binder.release();
+            binder = null;
+        }
         try { if (wm != null && panel != null) wm.removeView(panel); } catch (Throwable ignored) {}
         panel = null;
+        wm = null;
         super.onDestroy();
     }
 
@@ -123,6 +144,28 @@ public class FloatService extends Service {
         r4.addView(btn("Commit", v -> commit()), weight());
         box.addView(r4);
 
+        TextView faceLabel = tv("Face actions (TX22)", 9, true);
+        faceLabel.setGravity(Gravity.CENTER);
+        faceLabel.setTextColor(0xff8ab4d4);
+        faceLabel.setPadding(0, dp(4), 0, dp(2));
+        box.addView(faceLabel);
+
+        LinearLayout rFace1 = row();
+        rFace1.addView(btn("EYE", v -> triggerActionSeek(ActionRanges.ACTION_EYE)), weight());
+        rFace1.addView(btn("HEAD", v -> triggerActionSeek(ActionRanges.ACTION_HEAD_UP)), weight());
+        rFace1.addView(btn("MOUTH", v -> triggerActionSeek(ActionRanges.ACTION_MOUTH)), weight());
+        box.addView(rFace1);
+
+        LinearLayout rFace2 = row();
+        rFace2.addView(btn("L", v -> triggerActionSeek(ActionRanges.ACTION_TURN_LEFT)), weight());
+        rFace2.addView(btn("CTR", v -> triggerActionSeek(ActionRanges.ACTION_CENTER)), weight());
+        rFace2.addView(btn("R", v -> triggerActionSeek(ActionRanges.ACTION_TURN_RIGHT)), weight());
+        box.addView(rFace2);
+
+        LinearLayout rFace3 = row();
+        rFace3.addView(btn("NOD", v -> triggerActionSeek(ActionRanges.ACTION_NOD)), wideWeight());
+        box.addView(rFace3);
+
         LinearLayout r5 = row();
         r5.addView(btn("Open app", v -> openApp()), weight());
         r5.addView(btn("Close", v -> stopSelf()), weight());
@@ -161,6 +204,30 @@ public class FloatService extends Service {
         log.log("float", "commit routed to TransformController; no direct Binder/TX in FloatService");
         controller.commit(TransformController.Source.FLOAT, "float-commit");
         refreshDelayed();
+    }
+
+    private void triggerActionSeek(int actionId) {
+        if (txExecutor == null || binder == null) return;
+        final long beginUs = actionRangeBegin(actionId);
+        final long endUs = actionRangeEnd(actionId);
+        log.log("float", "TX22 seek action=" + actionId + " beginUs=" + beginUs + " endUs=" + endUs);
+        txExecutor.execute(() -> {
+            try {
+                binder.setPreferredService(RootBootstrap.FIXED_SERVICE_NAME);
+                int rc = binder.setRange(beginUs, endUs);
+                log.log("float", "TX22 result action=" + actionId + " rc=" + rc);
+            } catch (Throwable t) {
+                log.log("float", "TX22 error action=" + actionId + ": " + t);
+            }
+        });
+    }
+
+    private long actionRangeBegin(int actionId) {
+        return prefs.getLong(ActionRanges.PREF_BEGIN_PREFIX + actionId, ActionRanges.defaultBegin(actionId));
+    }
+
+    private long actionRangeEnd(int actionId) {
+        return prefs.getLong(ActionRanges.PREF_END_PREFIX + actionId, ActionRanges.defaultEnd(actionId));
     }
 
     private void openApp() {
